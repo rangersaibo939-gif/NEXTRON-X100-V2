@@ -7,11 +7,10 @@ It deliberately keeps provider credentials out of source control.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
 
 from core.model_registry import ModelProfile, ModelRegistry
 from core.router_engine import Router
-from core.providers.base import AIProvider, AIResponse
+from core.providers.base import AIProvider
 
 
 @dataclass
@@ -26,16 +25,21 @@ class ExecutionResult:
 class Orchestrator:
     """Route a task to the best model and execute it with failover."""
 
-    def __init__(
-        self,
-        registry: ModelRegistry,
-        providers: dict[str, AIProvider],
-    ) -> None:
+    def __init__(self, registry: ModelRegistry, providers: dict[str, AIProvider]) -> None:
         self.registry = registry
         self.providers = providers
         self.router = Router(registry)
 
     def execute(self, task: str) -> ExecutionResult:
+        """Execute a non-empty task, failing over across ranked candidates.
+
+        Provider exceptions are treated like failed responses so one broken
+        integration cannot crash the entire orchestration chain.
+        """
+        task = task.strip()
+        if not task:
+            raise ValueError("Task must not be empty")
+
         decisions = self.router.rank(task)
         if not decisions:
             raise RuntimeError("No enabled AI models are available")
@@ -52,8 +56,13 @@ class Orchestrator:
                 continue
 
             attempts += 1
-            response = provider.generate(task)
-            if response.success and response.text.strip():
+            try:
+                response = provider.generate(task)
+            except Exception as exc:  # noqa: BLE001 - fail over to the next provider
+                response = None
+                last_error = f"Provider exception: {exc}"
+
+            if response is not None and response.success and response.text.strip():
                 return ExecutionResult(
                     text=response.text,
                     model=model,
@@ -63,17 +72,14 @@ class Orchestrator:
                 )
 
             self.router.failures[model.name] = self.router.failures.get(model.name, 0) + 1
-            last_error = response.error or "Provider returned an empty response"
+            if response is not None:
+                last_error = response.error or "Provider returned an empty response"
 
         raise RuntimeError(f"All candidate AI models failed: {last_error}")
 
 
 def registry_from_providers(providers: dict[str, AIProvider]) -> ModelRegistry:
-    """Build a minimal registry from provider objects that expose model metadata.
-
-    Providers may optionally expose a ``model_profile`` attribute. This keeps
-    provider-specific metadata out of the router while allowing dynamic setup.
-    """
+    """Build a minimal registry from provider objects that expose model metadata."""
     registry = ModelRegistry()
     for provider in providers.values():
         profile = getattr(provider, "model_profile", None)
