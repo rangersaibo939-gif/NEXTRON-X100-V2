@@ -10,23 +10,31 @@ import os
 from .openai_compatible import OpenAICompatibleProvider
 
 
-def build_providers() -> list[OpenAICompatibleProvider]:
-    providers: list[OpenAICompatibleProvider] = []
+def build_providers() -> dict[str, OpenAICompatibleProvider]:
+    providers: dict[str, OpenAICompatibleProvider] = {}
 
     if os.getenv("GROQ_API_KEY"):
-        providers.append(OpenAICompatibleProvider(
+        provider = OpenAICompatibleProvider(
             name="groq",
             base_url="https://api.groq.com/openai/v1",
             model=os.getenv("NEXTRON_GROQ_MODEL", "openai/gpt-oss-20b"),
             api_key_env="GROQ_API_KEY",
-        ))
+            capabilities={"coding": 94, "reasoning": 92, "research": 70},
+            reliability=92,
+            speed=96,
+        )
+        providers[provider.name] = provider
 
     if os.getenv("OPENROUTER_API_KEY"):
-        providers.append(OpenAICompatibleProvider(
+        provider = OpenAICompatibleProvider(
             name="openrouter",
             base_url="https://openrouter.ai/api/v1",
             model=os.getenv("NEXTRON_OPENROUTER_MODEL", "openrouter/free"),
             api_key_env="OPENROUTER_API_KEY",
-        ))
+            capabilities={"coding": 88, "reasoning": 90, "vision": 70, "research": 82},
+            reliability=86,
+            speed=82,
+        )
+        providers[provider.name] = provider
 
     return providers
