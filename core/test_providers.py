@@ -1,4 +1,4 @@
-from providers.base import AIProvider, AIResponse
+from core.providers.base import AIProvider, AIResponse
 
 
 class TestProvider(AIProvider):
