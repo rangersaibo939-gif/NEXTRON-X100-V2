@@ -33,14 +33,10 @@ class BuildRequest:
     asset_files: Dict[str, str] = field(default_factory=dict)
     manifest: Optional[str] = None
     min_sdk: int = 29
-    target_sdk: int = 35
+    target_sdk: int = 36
     version_code: int = 1
     version_name: str = "1.0"
     build_type: str = "debug"
-    output_directory: Optional[str] = None
-    keystore_path: Optional[str] = None
-    keystore_password: Optional[str] = None
-    key_alias: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -66,7 +62,6 @@ class BuildResult:
     logs: List[BuildLog] = field(default_factory=list)
     error_message: Optional[str] = None
     repair_attempt: int = 0
-    failed_stage: Optional[BuildStage] = None
 
     @classmethod
     def success(cls, artifacts: List[BuildArtifact], logs: List[BuildLog]) -> "BuildResult":
@@ -78,6 +73,5 @@ class BuildResult:
         logs: List[BuildLog],
         error_message: str,
         repair_attempt: int = 0,
-        stage: Optional[BuildStage] = None,
     ) -> "BuildResult":
-        return cls(BuildStatus.FAILED, [], logs, error_message, repair_attempt, stage)
+        return cls(BuildStatus.FAILED, [], logs, error_message, repair_attempt)
