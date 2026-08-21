@@ -3,9 +3,11 @@ name: NEXTRON V2 Autonomous Builder
 on:
   push:
     branches: [feature/nextron-builder-v2]
+  pull_request:
+    branches: [main, feature/nextron-builder-v2]
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "17,47 * * * *"
       timezone: "Asia/Kolkata"
 
 concurrency:
@@ -24,10 +26,9 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       NEXTRON_AGENT_MODEL: openrouter/auto
       NEXTRON_AGENT_MAX_ITERATIONS: "5"
-      NEXTRON_AGENT_BRANCH: feature/nextron-builder-v2
     steps:
       - name: Checkout working branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
         with:
           ref: feature/nextron-builder-v2
           fetch-depth: 0
@@ -39,13 +40,13 @@ jobs:
           python-version: "3.13"
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "9.7"
 
@@ -61,100 +62,7 @@ jobs:
 
       - name: Run autonomous coding loop
         if: ${{ env.OPENROUTER_API_KEY != '' }}
-        run: |
-          python - <<'PY'
-          import json, os, subprocess
-          from pathlib import Path
-          from core.providers.catalog import build_providers
-
-          root = Path.cwd()
-          max_iterations = max(1, int(os.getenv("NEXTRON_AGENT_MAX_ITERATIONS", "5")))
-          allowed = ("core/", "tests/", "docs/", "NEXTRON_V2_AUTONOMOUS.md")
-
-          def run(cmd, timeout=1200):
-              p = subprocess.run(cmd, cwd=root, text=True, stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT, timeout=timeout, check=False)
-              return p.returncode, p.stdout[-16000:]
-
-          def snapshot():
-              chunks = []
-              for cmd, label in [
-                  (["git", "status", "--short"], "GIT STATUS"),
-                  (["git", "diff", "--", "core", "tests", "docs", "NEXTRON_V2_AUTONOMOUS.md"], "CURRENT DIFF"),
-              ]:
-                  _, out = run(cmd)
-                  chunks.append(label + ":\n" + out)
-              for path in [
-                  "README.md", "core/app_plan.py", "core/ai_planner.py",
-                  "core/app_builder/contracts.py", "core/app_builder/pipeline.py",
-                  "core/app_builder/project_generator.py",
-                  "core/app_builder/toolchain/gradle_backend.py", "core/nextron.py",
-              ]:
-                  p = root / path
-                  if p.is_file():
-                      chunks.append(f"FILE {path}:\n" + p.read_text(encoding="utf-8", errors="replace")[-12000:])
-              return "\n\n".join(chunks)[-50000:]
-
-          providers = build_providers()
-          provider = providers.get("openrouter") or providers.get("groq")
-          if provider is None:
-              raise SystemExit("No AI provider configured")
-
-          for iteration in range(1, max_iterations + 1):
-              print(f"===== AUTONOMOUS ITERATION {iteration}/{max_iterations} =====")
-              prompt = f'''You are the senior engineer finishing NEXTRON X-100 Builder V2.
-              Turn the repository into a real end-to-end natural-language Android app builder.
-              Use Kotlin + Jetpack Compose only for Android UI: no Java and no XML layouts.
-              Choose the highest-value unfinished V2 capability. Make one coherent increment.
-              Preserve working behavior and tests. Never touch secrets or workflow files.
-              Never delete files. Only change files under core/, tests/, docs/, or
-              NEXTRON_V2_AUTONOMOUS.md.
-              Return ONLY JSON in this exact shape:
-              {{"summary":"short description","changes":[{{"path":"relative/path","content":"complete UTF-8 file content"}}],"done":false}}
-              If no useful safe change remains, return changes=[].
-
-              REPOSITORY SNAPSHOT:
-              {snapshot()}'''
-
-              response = provider.generate(prompt)
-              if not response.success:
-                  raise SystemExit(response.error or "AI generation failed")
-              text = response.text.strip()
-              start, end = text.find("{"), text.rfind("}")
-              if start < 0 or end <= start:
-                  raise SystemExit("AI did not return JSON")
-              plan = json.loads(text[start:end + 1])
-              print("PLAN:", plan.get("summary", ""))
-              changes = plan.get("changes", [])
-              if not changes:
-                  print("No changes proposed; stopping.")
-                  break
-
-              for change in changes:
-                  path = str(change.get("path", ""))
-                  content = change.get("content")
-                  if (not path or content is None or path.startswith("/") or
-                      ".." in Path(path).parts or
-                      not any(path == x or path.startswith(x) for x in allowed)):
-                      raise SystemExit(f"Rejected unsafe change path: {path!r}")
-                  target = root / path
-                  target.parent.mkdir(parents=True, exist_ok=True)
-                  target.write_text(str(content), encoding="utf-8")
-                  print("APPLIED:", path)
-
-              ok, out = run(["python", "-m", "py_compile", "core/nextron.py", "core/app_plan.py", "core/ai_planner.py"])
-              print(out)
-              if ok:
-                  ok, out = run(["python", "-m", "pytest", "-q"])
-                  print(out)
-              if ok:
-                  print("VALIDATION PASSED")
-                  if plan.get("done") is True:
-                      print("V2 milestone reported complete.")
-                      break
-              else:
-                  print("VALIDATION FAILED; next iteration will repair it.")
-          PY
+        run: python tools/nextron_agent.py
 
       - name: Explain missing API key
         if: ${{ env.OPENROUTER_API_KEY == '' }}
@@ -163,7 +71,7 @@ jobs:
           echo "Add it as a repository Actions secret to enable autonomous coding."
           exit 1
 
-      - name: Validate final repository state
+      - name: Final validation
         run: |
           python -m py_compile core/nextron.py core/app_plan.py core/ai_planner.py
           python -m pytest -q
@@ -177,6 +85,6 @@ jobs:
           fi
           git config user.name "nextron-autonomous-agent"
           git config user.email "nextron-autonomous-agent@users.noreply.github.com"
-          git add -- core .github tools NEXTRON_V2_AUTONOMOUS.md
+          git add -- core .github tools tests docs NEXTRON_V2_AUTONOMOUS.md test_*.py
           git commit -m "[nextron-agent] autonomous V2 progress"
           git push origin feature/nextron-builder-v2
