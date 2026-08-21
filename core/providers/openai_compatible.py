@@ -33,7 +33,9 @@ class OpenAICompatibleProvider(AIProvider):
         self.model = model
         self.api_key_env = api_key_env
         self.timeout = timeout
+
         capabilities = capabilities or {}
+
         self.model_profile = ModelProfile(
             name=f"{name}:{model}",
             provider=name,
@@ -52,16 +54,41 @@ class OpenAICompatibleProvider(AIProvider):
 
     def generate(self, prompt: str) -> AIResponse:
         api_key = os.getenv(self.api_key_env)
-        if not api_key:
-            return AIResponse("", self.model, self.name, False, f"Missing {self.api_key_env}")
 
-        payload = json.dumps({
+        if not api_key:
+            return AIResponse(
+                "",
+                self.model,
+                self.name,
+                False,
+                f"Missing {self.api_key_env}",
+            )
+
+        payload = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-        }).encode("utf-8")
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are NEXTRON's structured planning engine. "
+                        "Follow the user's requested output format exactly. "
+                        "When JSON is requested, return only valid JSON."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+        }
+
+        body_bytes = json.dumps(payload).encode("utf-8")
+
         req = request.Request(
             f"{self.base_url}/chat/completions",
-            data=payload,
+            data=body_bytes,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -69,10 +96,68 @@ class OpenAICompatibleProvider(AIProvider):
             },
             method="POST",
         )
+
         try:
             with request.urlopen(req, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
-            text = body["choices"][0]["message"]["content"]
-            return AIResponse(text, self.model, self.name)
-        except (error.URLError, error.HTTPError, TimeoutError, KeyError, IndexError, json.JSONDecodeError) as exc:
-            return AIResponse("", self.model, self.name, False, str(exc))
+                raw = response.read().decode("utf-8")
+
+            body = json.loads(raw)
+
+            choices = body.get("choices")
+            if not choices:
+                return AIResponse(
+                    "",
+                    self.model,
+                    self.name,
+                    False,
+                    f"Provider returned no choices: {raw[:500]}",
+                )
+
+            message = choices[0].get("message", {})
+            text = message.get("content", "")
+
+            if not isinstance(text, str) or not text.strip():
+                return AIResponse(
+                    "",
+                    self.model,
+                    self.name,
+                    False,
+                    f"Provider returned empty content: {raw[:500]}",
+                )
+
+            return AIResponse(
+                text.strip(),
+                self.model,
+                self.name,
+                True,
+                None,
+            )
+
+        except error.HTTPError as exc:
+            try:
+                detail = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                detail = str(exc)
+
+            return AIResponse(
+                "",
+                self.model,
+                self.name,
+                False,
+                f"HTTP {exc.code}: {detail[:1000]}",
+            )
+
+        except (
+            error.URLError,
+            TimeoutError,
+            KeyError,
+            IndexError,
+            json.JSONDecodeError,
+        ) as exc:
+            return AIResponse(
+                "",
+                self.model,
+                self.name,
+                False,
+                str(exc),
+            )
