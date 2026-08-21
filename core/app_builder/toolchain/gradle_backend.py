@@ -58,10 +58,11 @@ class GradleAndroidAdapter:
         logs.append(BuildLog(BuildStage.PREPARE, "INFO", f"Gradle workspace prepared: {project}"))
 
     def _command(self, project: Path, build_type: str) -> list[str]:
-        wrapper = project / ("gradlew.bat" if shutil.which("cmd") else "gradlew")
-        if wrapper.exists():
-            if wrapper.name == "gradlew":
-                wrapper.chmod(wrapper.stat().st_mode | 0o111)
+        # Always prefer the project's wrapper when present. This makes builds
+        # reproducible and avoids accidentally selecting a different global Gradle.
+        wrapper = project / "gradlew"
+        if wrapper.is_file():
+            wrapper.chmod(wrapper.stat().st_mode | 0o111)
             executable = str(wrapper)
         else:
             executable = shutil.which(self.gradle)
@@ -90,7 +91,9 @@ class GradleAndroidAdapter:
         candidates = list((output or project).rglob("*.apk"))
         if not candidates:
             raise GradleBuildError(BuildStage.PACKAGE, "Gradle completed but no APK was found")
-        return max(candidates, key=lambda p: p.stat().st_mtime)
+        # Prefer the newest nanosecond timestamp; use the path as a deterministic
+        # tie-breaker for files created within the same filesystem timestamp tick.
+        return max(candidates, key=lambda p: (p.stat().st_mtime_ns, str(p)))
 
 
 class GradleBuildError(RuntimeError):
