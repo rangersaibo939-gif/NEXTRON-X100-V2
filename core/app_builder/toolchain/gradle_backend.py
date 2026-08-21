@@ -89,8 +89,16 @@ class GradleAndroidAdapter:
         candidates = list((output or project).rglob("*.apk"))
         if not candidates:
             raise GradleBuildError(BuildStage.PACKAGE, "Gradle completed but no APK was found")
-        # Prefer the most recently modified APK. When filesystem timestamps are
-        # identical, use the path as a deterministic tie-breaker.
+
+        # A Gradle build normally leaves one relevant APK. If several APKs are
+        # present in the same output directory, prefer the lexically latest
+        # artifact name; this is deterministic and handles timestamp ties (and
+        # coarse Android/Termux filesystem timestamps) reliably.
+        if len(candidates) > 1:
+            same_dirs = {p.parent for p in candidates}
+            if len(same_dirs) == 1:
+                return max(candidates, key=lambda p: p.name)
+
         return max(candidates, key=lambda p: (p.stat().st_mtime_ns, str(p)))
 
 
