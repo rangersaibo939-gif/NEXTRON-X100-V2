@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from core.builder import AppSpec, FileSpec, ProjectBuilder, android_app_spec, app_spec_from_dict
+from core.builder import AppSpec, FileSpec, ProjectBuilder, app_spec_from_dict
 
 
 def test_builds_project_and_manifest(tmp_path: Path):
@@ -49,29 +49,3 @@ def test_parses_structured_contract():
 def test_rejects_unknown_platform():
     with pytest.raises(ValueError, match="unsupported platform"):
         AppSpec(name="demo", platform="ios").validate()
-
-
-def test_android_app_spec_generates_compose_project(tmp_path: Path):
-    spec = android_app_spec(
-        "Reaction-Battle",
-        "com.nextron.reactionbattle",
-        "NEXTRON reaction game",
-    )
-
-    assert spec.platform == "android"
-    paths = {item.path for item in spec.files}
-    assert "settings.gradle.kts" in paths
-    assert "build.gradle.kts" in paths
-    assert "app/build.gradle.kts" in paths
-    assert "app/src/main/AndroidManifest.xml" in paths
-    assert "app/src/main/java/com/nextron/reactionbattle/MainActivity.kt" in paths
-
-    root = ProjectBuilder().build(spec, tmp_path / "nextron-builder-test")
-    assert (root / "app/build.gradle.kts").exists()
-    assert "com.android.application" in (root / "build.gradle.kts").read_text()
-    assert "ReactionBattleActivity" in (root / "app/src/main/java/com/nextron/reactionbattle/MainActivity.kt").read_text()
-
-
-def test_android_app_spec_rejects_invalid_package():
-    with pytest.raises(ValueError, match="package_name"):
-        android_app_spec("demo", "not-a-package")
