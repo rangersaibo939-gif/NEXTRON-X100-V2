@@ -67,6 +67,14 @@ class OpenAICompatibleProvider(AIProvider):
                 pass
         return min(base * (2 ** attempt), 8.0)
 
+    @staticmethod
+    def _http_error(response: requests.Response) -> str:
+        """Return a useful provider error without exposing credentials."""
+        detail = response.text.strip()
+        if len(detail) > 1000:
+            detail = detail[:1000] + "..."
+        return f"HTTP {response.status_code}: {detail}" if detail else f"HTTP {response.status_code}"
+
     def generate(self, prompt: str) -> AIResponse:
         api_key = os.getenv(self.api_key_env)
         if not api_key:
@@ -94,7 +102,9 @@ class OpenAICompatibleProvider(AIProvider):
                 if response.status_code == 429 and attempt < self.max_retries:
                     time.sleep(self._retry_delay(response, attempt, self.retry_base_seconds))
                     continue
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    return AIResponse("", self.model, self.name, False, self._http_error(response))
+
                 body = response.json()
                 message = body["choices"][0]["message"]
                 text = message.get("content") or ""
