@@ -7,14 +7,51 @@ class FakeAdapter:
         return None
 
 
-def test_project_generator_creates_android_sources(tmp_path):
+def test_project_generator_creates_functional_compose_sources(tmp_path):
+    result = AndroidProjectGenerator().generate(
+        str(tmp_path / "demo"),
+        "com.nextron.demo",
+        "NEXTRON Demo",
+        screens=("Home", "Details"),
+        features=("Dark mode", "Totals"),
+        actions=("Add Item", "Delete Item"),
+        theme={"mode": "dark"},
+    )
+
+    assert result.activity_class == "MainActivity"
+    manifest = result.root / "app/src/main/AndroidManifest.xml"
+    source = result.root / "app/src/main/java/com/nextron/demo/MainActivity.kt"
+    gradle = result.root / "app/build.gradle.kts"
+
+    assert manifest.exists()
+    assert source.exists()
+    assert gradle.exists()
+
+    kotlin = source.read_text(encoding="utf-8")
+    assert "@Composable" in kotlin
+    assert "var currentScreen by remember" in kotlin
+    assert "currentScreen = 1" in kotlin
+    assert 'Text("Home"' in kotlin
+    assert 'Text("Details"' in kotlin
+    assert 'Text("Dark mode"' in kotlin
+    assert 'Text("Totals"' in kotlin
+    assert 'lastAction = "Add Item"' in kotlin
+    assert 'lastAction = "Delete Item"' in kotlin
+    assert "darkColorScheme()" in kotlin
+    assert "class MainActivity : ComponentActivity()" in kotlin
+    assert ".java" not in kotlin
+
+
+def test_project_generator_defaults_to_a_functional_home_screen(tmp_path):
     result = AndroidProjectGenerator().generate(
         str(tmp_path / "demo"), "com.nextron.demo", "NEXTRON Demo"
     )
-    assert result.activity_class == "MainActivity"
-    assert (result.root / "AndroidManifest.xml").exists()
-    assert (result.root / "src/main/java/com/nextron/demo/MainActivity.java").exists()
-    assert (result.root / "src/main/res/values/strings.xml").exists()
+    source = result.root / "app/src/main/java/com/nextron/demo/MainActivity.kt"
+    kotlin = source.read_text(encoding="utf-8")
+
+    assert 'Text("Home"' in kotlin
+    assert "var currentScreen by remember" in kotlin
+    assert "Primary Action" in kotlin
 
 
 def test_toolchain_registry_prefers_direct_backend():
