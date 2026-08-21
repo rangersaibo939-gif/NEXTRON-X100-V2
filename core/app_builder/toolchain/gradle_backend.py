@@ -58,9 +58,10 @@ class GradleAndroidAdapter:
         logs.append(BuildLog(BuildStage.PREPARE, "INFO", f"Gradle workspace prepared: {project}"))
 
     def _command(self, project: Path, build_type: str) -> list[str]:
-        wrapper = project / "gradlew"
-        if wrapper.is_file():
-            wrapper.chmod(wrapper.stat().st_mode | 0o111)
+        wrapper = project / ("gradlew.bat" if shutil.which("cmd") else "gradlew")
+        if wrapper.exists():
+            if wrapper.name == "gradlew":
+                wrapper.chmod(wrapper.stat().st_mode | 0o111)
             executable = str(wrapper)
         else:
             executable = shutil.which(self.gradle)
@@ -89,18 +90,7 @@ class GradleAndroidAdapter:
         candidates = list((output or project).rglob("*.apk"))
         if not candidates:
             raise GradleBuildError(BuildStage.PACKAGE, "Gradle completed but no APK was found")
-
-        # A Gradle build normally leaves one relevant APK. If several APKs are
-        # present in the same output directory, use deterministic ordering for
-        # coarse timestamp filesystems such as Termux. The test/build contract
-        # expects the first generated artifact in lexical order when timestamps
-        # cannot distinguish candidates.
-        if len(candidates) > 1:
-            same_dirs = {p.parent for p in candidates}
-            if len(same_dirs) == 1:
-                return min(candidates, key=lambda p: p.name)
-
-        return max(candidates, key=lambda p: (p.stat().st_mtime_ns, str(p)))
+        return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
 class GradleBuildError(RuntimeError):
