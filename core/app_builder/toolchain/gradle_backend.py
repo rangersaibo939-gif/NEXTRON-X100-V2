@@ -58,8 +58,6 @@ class GradleAndroidAdapter:
         logs.append(BuildLog(BuildStage.PREPARE, "INFO", f"Gradle workspace prepared: {project}"))
 
     def _command(self, project: Path, build_type: str) -> list[str]:
-        # Always prefer the project's wrapper when present. This makes builds
-        # reproducible and avoids accidentally selecting a different global Gradle.
         wrapper = project / "gradlew"
         if wrapper.is_file():
             wrapper.chmod(wrapper.stat().st_mode | 0o111)
@@ -91,8 +89,8 @@ class GradleAndroidAdapter:
         candidates = list((output or project).rglob("*.apk"))
         if not candidates:
             raise GradleBuildError(BuildStage.PACKAGE, "Gradle completed but no APK was found")
-        # Prefer the newest nanosecond timestamp; use the path as a deterministic
-        # tie-breaker for files created within the same filesystem timestamp tick.
+        # Prefer the most recently modified APK. When filesystem timestamps are
+        # identical, use the path as a deterministic tie-breaker.
         return max(candidates, key=lambda p: (p.stat().st_mtime_ns, str(p)))
 
 
