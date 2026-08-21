@@ -51,7 +51,7 @@ def test_rejects_unknown_platform():
         AppSpec(name="demo", platform="ios").validate()
 
 
-def test_android_app_spec_generates_compose_project():
+def test_android_app_spec_generates_compose_project(tmp_path: Path):
     spec = android_app_spec(
         "Reaction-Battle",
         "com.nextron.reactionbattle",
@@ -66,7 +66,7 @@ def test_android_app_spec_generates_compose_project():
     assert "app/src/main/AndroidManifest.xml" in paths
     assert "app/src/main/java/com/nextron/reactionbattle/MainActivity.kt" in paths
 
-    root = ProjectBuilder().build(spec, Path("/tmp/nextron-builder-test"))
+    root = ProjectBuilder().build(spec, tmp_path / "nextron-builder-test")
     assert (root / "app/build.gradle.kts").exists()
     assert "com.android.application" in (root / "build.gradle.kts").read_text()
     assert "ReactionBattleActivity" in (root / "app/src/main/java/com/nextron/reactionbattle/MainActivity.kt").read_text()
