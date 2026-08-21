@@ -80,11 +80,16 @@ class OpenAICompatibleProvider(AIProvider):
         if not api_key:
             return AIResponse("", self.model, self.name, False, f"Missing {self.api_key_env}")
 
+        # Groq's current Chat Completions API recommends max_completion_tokens
+        # (max_tokens is deprecated). GPT-OSS also supports explicit reasoning
+        # effort; medium gives multi-agent steps enough reasoning budget.
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": self.max_tokens,
+            "max_completion_tokens": self.max_tokens,
         }
+        if self.name == "groq" and self.model.startswith("openai/gpt-oss-"):
+            payload["reasoning_effort"] = "medium"
 
         for attempt in range(self.max_retries + 1):
             try:
