@@ -27,50 +27,21 @@ Rules:
 - no markdown
 - no explanation
 """
+        response = self.provider.generate(prompt)
 
-        last_error = None
+        if not response.success:
+            raise RuntimeError(response.error or "AI planning failed")
 
-        for attempt in range(3):
-            response = self.provider.generate(prompt)
+        text = response.text.strip()
 
-            if not response.success:
-                last_error = response.error or "AI planning failed"
-                continue
+        # Extract JSON if the model accidentally adds surrounding text.
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            raise ValueError("AI did not return a JSON object")
 
-            text = response.text.strip()
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"AI returned invalid JSON: {exc}") from exc
 
-            # Remove optional Markdown code fences.
-            text = re.sub(
-                r"^```(?:json)?\s*",
-                "",
-                text,
-                flags=re.IGNORECASE,
-            )
-            text = re.sub(r"\s*```$", "", text)
-
-            # First try the complete response directly.
-            try:
-                data = json.loads(text)
-                return AppPlan.from_dict(data)
-            except (json.JSONDecodeError, ValueError) as exc:
-                last_error = str(exc)
-
-            # If the model added surrounding text, extract the JSON object.
-            start = text.find("{")
-            end = text.rfind("}")
-
-            if start == -1 or end == -1 or end <= start:
-                last_error = "AI did not return a JSON object"
-                continue
-
-            candidate = text[start:end + 1]
-
-            try:
-                data = json.loads(candidate)
-                return AppPlan.from_dict(data)
-            except (json.JSONDecodeError, ValueError) as exc:
-                last_error = str(exc)
-
-        raise ValueError(
-            f"AI planning failed after 3 attempts: {last_error}"
-        )
+        return AppPlan.from_dict(data)

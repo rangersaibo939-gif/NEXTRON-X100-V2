@@ -33,7 +33,7 @@ class BuildRequest:
     asset_files: Dict[str, str] = field(default_factory=dict)
     manifest: Optional[str] = None
     min_sdk: int = 29
-    target_sdk: int = 36
+    target_sdk: int = 35
     version_code: int = 1
     version_name: str = "1.0"
     build_type: str = "debug"
