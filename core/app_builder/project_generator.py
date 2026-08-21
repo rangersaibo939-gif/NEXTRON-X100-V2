@@ -1,8 +1,12 @@
 """Kotlin + Jetpack Compose Android project generator for NEXTRON Builder V2."""
 
+from __future__ import annotations
+
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
-import re
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -13,6 +17,8 @@ class GeneratedProject:
 
 
 class AndroidProjectGenerator:
+    """Materialize a deterministic Kotlin/Compose project from an AppPlan."""
+
     def generate(
         self,
         root: str,
@@ -21,7 +27,9 @@ class AndroidProjectGenerator:
         screens: tuple[str, ...] = (),
         features: tuple[str, ...] = (),
         actions: tuple[str, ...] = (),
-        theme: dict | None = None,
+        theme: dict[str, Any] | None = None,
+        data_model: dict[str, Any] | None = None,
+        description: str = "",
     ) -> GeneratedProject:
         target = Path(root)
         package_path = Path(*package_name.split("."))
@@ -32,18 +40,27 @@ class AndroidProjectGenerator:
         features = tuple(features)
         actions = tuple(actions)
         theme = dict(theme or {})
+        data_model = dict(data_model or {})
 
         def clean(value: str) -> str:
             return re.sub(r"[^A-Za-z0-9 _-]", "", str(value)).strip()
 
-        def kotlin_string(value: str) -> str:
-            return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+        def kotlin_string(value: Any) -> str:
+            return (
+                str(value)
+                .replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", " ")
+            )
 
         safe_name = kotlin_string(clean(app_name) or "NEXTRON App")
+        safe_description = kotlin_string(description)
         dark_value = str(theme.get("mode", theme.get("dark", ""))).lower()
         use_dark_theme = dark_value in {"dark", "true", "night"} or "dark" in dark_value
 
-        settings = """pluginManagement {
+        settings = """import org.gradle.api.initialization.resolve.RepositoriesMode
+
+pluginManagement {
     repositories {
         google()
         mavenCentral()
@@ -64,15 +81,13 @@ include(":app")
 """
 
         root_gradle = """plugins {
-    id("com.android.application") version "8.7.3" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
+    id("com.android.application") version "9.3.1" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.3.21" apply false
 }
 """
 
         app_gradle = f"""plugins {{
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }}
 
@@ -86,16 +101,14 @@ android {{
         versionCode = 1
         versionName = "1.0"
     }}
-    compileOptions {{
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+    buildFeatures {{
+        compose = true
     }}
-    kotlinOptions {{ jvmTarget = "17" }}
 }}
 
 dependencies {{
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    implementation("androidx.activity:activity-compose:1.10.0")
+    implementation(platform("androidx.compose:compose-bom:2025.08.00"))
+    implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
@@ -126,14 +139,20 @@ kotlin.code.style=official
         )
 
         feature_lines = "\n".join(
-            f'                Text("• {kotlin_string(clean(feature))}")'
-            for feature in features if clean(feature)
-        ) or '                Text("Ready to use")'
+            f'                        Text("• {kotlin_string(clean(feature))}")'
+            for feature in features
+            if clean(feature)
+        ) or '                        Text("Ready to use")'
+
+        data_lines = "\n".join(
+            f'                        Text("• {kotlin_string(key)}: {kotlin_string(value)}")'
+            for key, value in data_model.items()
+        ) or '                        Text("No data model fields")'
 
         action_lines = "\n".join(
-            f'                Button(onClick = {{ lastAction = "{kotlin_string(clean(action) or f"Action {index + 1}")}"; actionCount++ }}) {{ Text("{kotlin_string(clean(action) or f"Action {index + 1}")}") }}'
+            f'                        Button(onClick = {{ lastAction = "{kotlin_string(clean(action) or f"Action {index + 1}")}"; actionCount++ }}) {{ Text("{kotlin_string(clean(action) or f"Action {index + 1}")}") }}'
             for index, action in enumerate(actions)
-        ) or '                Button(onClick = { actionCount++ }) { Text("Primary Action") }'
+        ) or '                        Button(onClick = { actionCount++ }) { Text("Primary Action") }'
 
         screen_cases = []
         for index, screen in enumerate(screens):
@@ -147,8 +166,15 @@ kotlin.code.style=official
                         Text("{title}", style = MaterialTheme.typography.headlineSmall)
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("{safe_name}")
-                        Spacer(modifier = Modifier.height(12.dp))
+                        if ("{safe_description}".isNotEmpty()) {{
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("{safe_description}")
+                        }}
+                        Spacer(modifier = Modifier.height(16.dp))
 {feature_lines}
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Data model", style = MaterialTheme.typography.titleMedium)
+{data_lines}
                         Spacer(modifier = Modifier.height(20.dp))
 {action_lines}
                         if (lastAction.isNotEmpty()) {{
@@ -221,6 +247,18 @@ fun NextronApp() {{
 }}
 '''
 
+        plan_asset = {
+            "app_name": app_name,
+            "package_name": package_name,
+            "description": description,
+            "platform": "android",
+            "screens": list(screens),
+            "features": list(features),
+            "theme": theme,
+            "data_model": data_model,
+            "actions": list(actions),
+        }
+
         (target / "settings.gradle.kts").write_text(settings, encoding="utf-8")
         (target / "build.gradle.kts").write_text(root_gradle, encoding="utf-8")
         (target / "gradle.properties").write_text(gradle_properties, encoding="utf-8")
@@ -230,5 +268,11 @@ fun NextronApp() {{
         main_dir = app_dir / "src" / "main"
         main_dir.mkdir(parents=True, exist_ok=True)
         (main_dir / "AndroidManifest.xml").write_text(manifest, encoding="utf-8")
+        assets_dir = main_dir / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        (assets_dir / "nextron_plan.json").write_text(
+            json.dumps(plan_asset, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
         (source_dir / "MainActivity.kt").write_text(activity_source, encoding="utf-8")
         return GeneratedProject(target, package_name, "MainActivity")
