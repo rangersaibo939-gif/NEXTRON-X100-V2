@@ -1,8 +1,4 @@
-"""Modular Android toolchain selection for NEXTRON Builder v2.
-
-This is NEXTRON-owned orchestration code. Concrete backends can wrap
-compatible open-source implementations without coupling the core to them.
-"""
+"""Modular Android toolchain selection for NEXTRON Builder v2."""
 
 from dataclasses import dataclass
 from enum import Enum
@@ -47,8 +43,24 @@ class ToolchainRegistry:
         self.adapters[backend] = adapter
         self.capabilities[backend] = capabilities
 
+    @staticmethod
+    def _needs_gradle(request: BuildRequest) -> bool:
+        """Kotlin/Compose and Gradle project files require the Gradle backend."""
+        paths = list(request.source_files) + list(request.resource_files)
+        return any(path.endswith(".kt") or path.endswith(".kts") for path in paths)
+
     def select(self, request: BuildRequest) -> Optional[ToolchainAdapter]:
-        # Prefer a direct on-device backend for small/self-contained projects.
+        # Kotlin/Compose must never be sent to the Java-only direct backend.
+        if self._needs_gradle(request):
+            gradle = self.capabilities.get(ToolchainBackend.GRADLE)
+            if (
+                gradle
+                and gradle.supports_kotlin
+                and ToolchainBackend.GRADLE in self.adapters
+            ):
+                return self.adapters[ToolchainBackend.GRADLE]
+
+        # Prefer the deterministic direct backend for self-contained Java apps.
         direct = self.capabilities.get(ToolchainBackend.DIRECT_ANDROID)
         if direct and ToolchainBackend.DIRECT_ANDROID in self.adapters:
             if request.source_files and direct.supports_java:
