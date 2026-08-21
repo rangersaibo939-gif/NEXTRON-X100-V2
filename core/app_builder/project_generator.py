@@ -37,12 +37,7 @@ class AndroidProjectGenerator:
             return re.sub(r"[^A-Za-z0-9 _-]", "", str(value)).strip()
 
         def kotlin_string(value: str) -> str:
-            return (
-                str(value)
-                .replace("\\", "\\\\")
-                .replace('"', '\\"')
-                .replace("\n", " ")
-            )
+            return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
 
         safe_name = kotlin_string(clean(app_name) or "NEXTRON App")
         dark_value = str(theme.get("mode", theme.get("dark", ""))).lower()
@@ -84,7 +79,6 @@ include(":app")
 android {{
     namespace = "{package_name}"
     compileSdk = 35
-
     defaultConfig {{
         applicationId = "{package_name}"
         minSdk = 26
@@ -92,15 +86,11 @@ android {{
         versionCode = 1
         versionName = "1.0"
     }}
-
     compileOptions {{
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }}
-
-    kotlinOptions {{
-        jvmTarget = "17"
-    }}
+    kotlinOptions {{ jvmTarget = "17" }}
 }}
 
 dependencies {{
@@ -119,12 +109,8 @@ kotlin.code.style=official
 """
 
         manifest = f"""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application
-        android:theme="@android:style/Theme.Material.Light.NoActionBar"
-        android:label="{safe_name}">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
+    <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="{safe_name}">
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -135,46 +121,41 @@ kotlin.code.style=official
 """
 
         nav_lines = "\n".join(
-            f'            Button(onClick = {{ currentScreen = {index} }}) {{ Text("{kotlin_string(clean(screen) or f"Screen {index + 1}")}") }}'
+            f'                    Button(onClick = {{ currentScreen = {index} }}) {{ Text("{kotlin_string(clean(screen) or f"Screen {index + 1}")}") }}'
             for index, screen in enumerate(screens)
         )
 
         feature_lines = "\n".join(
-            f'        Text("• {kotlin_string(clean(feature))}")'
-            for feature in features
-            if clean(feature)
-        )
-        if not feature_lines:
-            feature_lines = '        Text("Ready to use")'
+            f'                Text("• {kotlin_string(clean(feature))}")'
+            for feature in features if clean(feature)
+        ) or '                Text("Ready to use")'
 
         action_lines = "\n".join(
-            f'            Button(onClick = {{ lastAction = "{kotlin_string(clean(action) or f"Action {index + 1}")}"; actionCount++ }}) {{ Text("{kotlin_string(clean(action) or f"Action {index + 1}")}") }}'
+            f'                Button(onClick = {{ lastAction = "{kotlin_string(clean(action) or f"Action {index + 1}")}"; actionCount++ }}) {{ Text("{kotlin_string(clean(action) or f"Action {index + 1}")}") }}'
             for index, action in enumerate(actions)
-        )
-        if not action_lines:
-            action_lines = '            Button(onClick = { actionCount++ }) { Text("Primary Action") }'
+        ) or '                Button(onClick = { actionCount++ }) { Text("Primary Action") }'
 
         screen_cases = []
         for index, screen in enumerate(screens):
             title = kotlin_string(clean(screen) or f"Screen {index + 1}")
             screen_cases.append(
-                f'''            {index} -> Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {{
-                Text("{title}", style = MaterialTheme.typography.headlineSmall)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("{safe_name}")
-                Spacer(modifier = Modifier.height(12.dp))
+                f'''                    {index} -> Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {{
+                        Text("{title}", style = MaterialTheme.typography.headlineSmall)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("{safe_name}")
+                        Spacer(modifier = Modifier.height(12.dp))
 {feature_lines}
-                Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 {action_lines}
-                if (lastAction.isNotEmpty()) {{
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Last action: ${{lastAction}} ({{actionCount}})")
-                }}
-            }}'''
+                        if (lastAction.isNotEmpty()) {{
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Last action: ${{lastAction}} (${{actionCount}})")
+                        }}
+                    }}'''
             )
         cases = "\n\n".join(screen_cases)
 
@@ -219,21 +200,14 @@ fun NextronApp() {{
     var currentScreen by remember {{ mutableIntStateOf(0) }}
     var actionCount by remember {{ mutableIntStateOf(0) }}
     var lastAction by remember {{ mutableStateOf("") }}
-
     val colors = if ({str(use_dark_theme).lower()}) darkColorScheme() else lightColorScheme()
 
     MaterialTheme(colorScheme = colors) {{
         Surface(modifier = Modifier.fillMaxSize()) {{
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {{
-                Text(
-                    text = "{safe_name}",
-                    style = MaterialTheme.typography.headlineMedium
-                )
+                Text("{safe_name}", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {{
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {{
 {nav_lines}
                 }}
                 Spacer(modifier = Modifier.height(20.dp))
@@ -250,15 +224,11 @@ fun NextronApp() {{
         (target / "settings.gradle.kts").write_text(settings, encoding="utf-8")
         (target / "build.gradle.kts").write_text(root_gradle, encoding="utf-8")
         (target / "gradle.properties").write_text(gradle_properties, encoding="utf-8")
-
         app_dir = target / "app"
         app_dir.mkdir(parents=True, exist_ok=True)
         (app_dir / "build.gradle.kts").write_text(app_gradle, encoding="utf-8")
-
         main_dir = app_dir / "src" / "main"
         main_dir.mkdir(parents=True, exist_ok=True)
         (main_dir / "AndroidManifest.xml").write_text(manifest, encoding="utf-8")
         (source_dir / "MainActivity.kt").write_text(activity_source, encoding="utf-8")
-
         return GeneratedProject(target, package_name, "MainActivity")
-'''}
