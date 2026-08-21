@@ -22,6 +22,7 @@ def build_providers() -> dict[str, OpenAICompatibleProvider]:
             capabilities={"coding": 94, "reasoning": 92, "research": 70},
             reliability=92,
             speed=96,
+            max_tokens=int(os.getenv("NEXTRON_GROQ_MAX_TOKENS", "1024")),
         )
         providers[provider.name] = provider
 
@@ -34,6 +35,7 @@ def build_providers() -> dict[str, OpenAICompatibleProvider]:
             capabilities={"coding": 88, "reasoning": 90, "vision": 70, "research": 82},
             reliability=86,
             speed=82,
+            max_tokens=int(os.getenv("NEXTRON_OPENROUTER_MAX_TOKENS", "1024")),
         )
         providers[provider.name] = provider
 
