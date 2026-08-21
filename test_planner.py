@@ -10,13 +10,30 @@ def planner() -> Planner:
     return Planner(Router(registry))
 
 
-def test_research_plan_has_synthesis_step():
+def test_research_plan_is_multi_step():
     plan = planner().plan("Research the latest Android AI tools")
-    assert [step.name for step in plan.steps] == ["research", "synthesize"]
+    assert [step.name for step in plan.steps] == [
+        "research", "analyze", "verify", "synthesize"
+    ]
     assert plan.steps[1].depends_on == ("research",)
+    assert plan.steps[2].depends_on == ("analyze",)
+    assert plan.steps[3].depends_on == ("verify",)
 
 
-def test_coding_plan_has_review_step():
+def test_coding_plan_is_multi_step():
     plan = planner().plan("Fix the Kotlin build failure")
-    assert [step.name for step in plan.steps] == ["analyze", "implement", "review"]
-    assert plan.steps[-1].depends_on == ("implement",)
+    assert [step.name for step in plan.steps] == [
+        "analyze", "implement", "test", "review", "synthesize"
+    ]
+    assert plan.steps[2].depends_on == ("implement",)
+    assert plan.steps[3].depends_on == ("test",)
+    assert plan.steps[4].depends_on == ("review",)
+
+
+def test_complex_reasoning_plan_has_review_and_synthesis():
+    plan = planner().plan(
+        "Analyze how NEXTRON should improve its AI task routing, then give a concise recommendation."
+    )
+    assert [step.name for step in plan.steps] == ["analyze", "review", "synthesize"]
+    assert plan.steps[1].depends_on == ("analyze",)
+    assert plan.steps[2].depends_on == ("review",)
