@@ -28,17 +28,17 @@ def main(request: str) -> int:
     print("NEXTRON X-100")
     print("==============================")
     print("Stage 1/4: AI planning...")
-    
+
     try:
         plan = AIPlanner(provider).plan(request)
     except Exception as exc:
         print(f"FAILED [planning]: {exc}")
         return 1
 
-    print(f"Plan: VALID")
+    print("Plan: VALID")
     print(f"App: {plan.app_name}")
     print(f"Package: {plan.package_name}")
-    print(f"Screens: {", ".join(plan.screens)}")
+    print(f"Screens: {', '.join(plan.screens)}")
 
     print("Stage 2/4: Kotlin/Compose generation...")
 
@@ -51,6 +51,10 @@ def main(request: str) -> int:
             str(project_dir),
             plan.package_name,
             plan.app_name,
+            screens=plan.screens,
+            features=plan.features,
+            actions=plan.actions,
+            theme=plan.theme,
         )
     except Exception as exc:
         print(f"FAILED [generation]: {exc}")
@@ -115,17 +119,14 @@ def main(request: str) -> int:
         print(f"WARNING: could not copy APK to Downloads: {exc}")
 
     print("NEXTRON BUILD COMPLETE")
-
     return 0
 
 
 if __name__ == "__main__":
     request = " ".join(sys.argv[1:]).strip()
-
     if not request:
         request = (
             "Build a simple expense tracker with a dark UI, "
             "an add expense button, categories and monthly total."
         )
-
     raise SystemExit(main(request))
