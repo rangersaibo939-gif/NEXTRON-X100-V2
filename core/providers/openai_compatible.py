@@ -6,9 +6,9 @@ Credentials are read only from environment variables.
 
 from __future__ import annotations
 
-import json
 import os
-from urllib import error, request
+
+import requests
 
 from core.model_registry import ModelProfile
 from .base import AIProvider, AIResponse
@@ -55,24 +55,25 @@ class OpenAICompatibleProvider(AIProvider):
         if not api_key:
             return AIResponse("", self.model, self.name, False, f"Missing {self.api_key_env}")
 
-        payload = json.dumps({
+        payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-        }).encode("utf-8")
-        req = request.Request(
-            f"{self.base_url}/chat/completions",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
+        }
         try:
-            with request.urlopen(req, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "NEXTRON/1.0",
+                },
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            body = response.json()
             text = body["choices"][0]["message"]["content"]
             return AIResponse(text, self.model, self.name)
-        except (error.URLError, error.HTTPError, TimeoutError, KeyError, IndexError, json.JSONDecodeError) as exc:
+        except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as exc:
             return AIResponse("", self.model, self.name, False, str(exc))
