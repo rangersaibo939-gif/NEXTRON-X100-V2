@@ -23,15 +23,30 @@ class AndroidProjectGenerator:
         actions: tuple[str, ...] = (),
         theme: dict | None = None,
     ) -> GeneratedProject:
-
         target = Path(root)
         package_path = Path(*package_name.split("."))
         source_dir = target / "app" / "src" / "main" / "java" / package_path
-
         source_dir.mkdir(parents=True, exist_ok=True)
 
-        safe_name = re.sub(r'[^A-Za-z0-9 _-]', '', app_name)
-        safe_name = safe_name.replace('"', '\\"')
+        screens = tuple(screens) or ("Home",)
+        features = tuple(features)
+        actions = tuple(actions)
+        theme = dict(theme or {})
+
+        def clean(value: str) -> str:
+            return re.sub(r"[^A-Za-z0-9 _-]", "", str(value)).strip()
+
+        def kotlin_string(value: str) -> str:
+            return (
+                str(value)
+                .replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", " ")
+            )
+
+        safe_name = kotlin_string(clean(app_name) or "NEXTRON App")
+        dark_value = str(theme.get("mode", theme.get("dark", ""))).lower()
+        use_dark_theme = dark_value in {"dark", "true", "night"} or "dark" in dark_value
 
         settings = """pluginManagement {
     repositories {
@@ -119,36 +134,75 @@ kotlin.code.style=official
 </manifest>
 """
 
-        screen_lines = "\n".join(
-            f'                Text("{re.sub(r"[^A-Za-z0-9 _-]", "", screen)}")'
-            for screen in screens
+        nav_lines = "\n".join(
+            f'            Button(onClick = {{ currentScreen = {index} }}) {{ Text("{kotlin_string(clean(screen) or f"Screen {index + 1}")}") }}'
+            for index, screen in enumerate(screens)
         )
 
         feature_lines = "\n".join(
-            f'                Text("• {re.sub(r"[^A-Za-z0-9 _-]", "", feature)}")'
+            f'        Text("• {kotlin_string(clean(feature))}")'
             for feature in features
+            if clean(feature)
         )
+        if not feature_lines:
+            feature_lines = '        Text("Ready to use")'
 
         action_lines = "\n".join(
-            f'                Button(onClick = {{ }}) {{ Text("{re.sub(r"[^A-Za-z0-9 _-]", "", action)}") }}'
-            for action in actions
+            f'            Button(onClick = {{ lastAction = "{kotlin_string(clean(action) or f"Action {index + 1}")}"; actionCount++ }}) {{ Text("{kotlin_string(clean(action) or f"Action {index + 1}")}") }}'
+            for index, action in enumerate(actions)
         )
+        if not action_lines:
+            action_lines = '            Button(onClick = { actionCount++ }) { Text("Primary Action") }'
 
-        activity_source = f"""package {package_name}
+        screen_cases = []
+        for index, screen in enumerate(screens):
+            title = kotlin_string(clean(screen) or f"Screen {index + 1}")
+            screen_cases.append(
+                f'''            {index} -> Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {{
+                Text("{title}", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("{safe_name}")
+                Spacer(modifier = Modifier.height(12.dp))
+{feature_lines}
+                Spacer(modifier = Modifier.height(20.dp))
+{action_lines}
+                if (lastAction.isNotEmpty()) {{
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Last action: ${{lastAction}} ({{actionCount}})")
+                }}
+            }}'''
+            )
+        cases = "\n\n".join(screen_cases)
+
+        activity_source = f'''package {package_name}
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -156,78 +210,55 @@ import androidx.compose.ui.unit.dp
 class MainActivity : ComponentActivity() {{
     override fun onCreate(savedInstanceState: Bundle?) {{
         super.onCreate(savedInstanceState)
-
-        setContent {{
-            MaterialTheme {{
-                Surface(modifier = Modifier.fillMaxSize()) {{
-                    NextronApp()
-                }}
-            }}
-        }}
+        setContent {{ NextronApp() }}
     }}
 }}
 
 @Composable
 fun NextronApp() {{
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {{
-        Text(
-            text = "{safe_name}",
-            style = MaterialTheme.typography.headlineMedium
-        )
+    var currentScreen by remember {{ mutableIntStateOf(0) }}
+    var actionCount by remember {{ mutableIntStateOf(0) }}
+    var lastAction by remember {{ mutableStateOf("") }}
 
-        Spacer(modifier = Modifier.height(20.dp))
+    val colors = if ({str(use_dark_theme).lower()}) darkColorScheme() else lightColorScheme()
 
-{screen_lines}
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-{feature_lines}
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-{action_lines}
+    MaterialTheme(colorScheme = colors) {{
+        Surface(modifier = Modifier.fillMaxSize()) {{
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {{
+                Text(
+                    text = "{safe_name}",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {{
+{nav_lines}
+                }}
+                Spacer(modifier = Modifier.height(20.dp))
+                when (currentScreen) {{
+{cases}
+                    else -> currentScreen = 0
+                }}
+            }}
+        }}
     }}
 }}
-"""
+'''
 
-        (target / "settings.gradle.kts").write_text(
-            settings,
-            encoding="utf-8",
-        )
-
-        (target / "build.gradle.kts").write_text(
-            root_gradle,
-            encoding="utf-8",
-        )
-
-        (target / "gradle.properties").write_text(
-            gradle_properties,
-            encoding="utf-8",
-        )
+        (target / "settings.gradle.kts").write_text(settings, encoding="utf-8")
+        (target / "build.gradle.kts").write_text(root_gradle, encoding="utf-8")
+        (target / "gradle.properties").write_text(gradle_properties, encoding="utf-8")
 
         app_dir = target / "app"
         app_dir.mkdir(parents=True, exist_ok=True)
-
-        (app_dir / "build.gradle.kts").write_text(
-            app_gradle,
-            encoding="utf-8",
-        )
+        (app_dir / "build.gradle.kts").write_text(app_gradle, encoding="utf-8")
 
         main_dir = app_dir / "src" / "main"
         main_dir.mkdir(parents=True, exist_ok=True)
-
-        (main_dir / "AndroidManifest.xml").write_text(
-            manifest,
-            encoding="utf-8",
-        )
-
-        (source_dir / "MainActivity.kt").write_text(
-            activity_source,
-            encoding="utf-8",
-        )
+        (main_dir / "AndroidManifest.xml").write_text(manifest, encoding="utf-8")
+        (source_dir / "MainActivity.kt").write_text(activity_source, encoding="utf-8")
 
         return GeneratedProject(target, package_name, "MainActivity")
+'''}
