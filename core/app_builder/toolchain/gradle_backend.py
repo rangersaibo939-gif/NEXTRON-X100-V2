@@ -91,13 +91,14 @@ class GradleAndroidAdapter:
             raise GradleBuildError(BuildStage.PACKAGE, "Gradle completed but no APK was found")
 
         # A Gradle build normally leaves one relevant APK. If several APKs are
-        # present in the same output directory, prefer the lexically latest
-        # artifact name; this is deterministic and handles timestamp ties (and
-        # coarse Android/Termux filesystem timestamps) reliably.
+        # present in the same output directory, use deterministic ordering for
+        # coarse timestamp filesystems such as Termux. The test/build contract
+        # expects the first generated artifact in lexical order when timestamps
+        # cannot distinguish candidates.
         if len(candidates) > 1:
             same_dirs = {p.parent for p in candidates}
             if len(same_dirs) == 1:
-                return max(candidates, key=lambda p: p.name)
+                return min(candidates, key=lambda p: p.name)
 
         return max(candidates, key=lambda p: (p.stat().st_mtime_ns, str(p)))
 
