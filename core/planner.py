@@ -1,7 +1,8 @@
 """Lightweight task planner for NEXTRON.
 
 Turns a user request into a small, ordered execution plan without requiring
-an external model. A future LLM planner can replace this component while
+an external model. The planner deliberately keeps planning deterministic so
+plans are reproducible; an LLM planner can replace this component later while
 keeping the same plan interface.
 """
 
@@ -37,13 +38,58 @@ class Planner:
         if task_type == "research":
             steps = (
                 PlanStep("research", goal, "research"),
-                PlanStep("synthesize", f"Synthesize findings for: {goal}", "reasoning", ("research",)),
+                PlanStep(
+                    "analyze",
+                    f"Analyze the research findings and identify the strongest evidence for: {goal}",
+                    "reasoning",
+                    ("research",),
+                ),
+                PlanStep(
+                    "verify",
+                    f"Verify the key claims and conclusions before answering: {goal}",
+                    "research",
+                    ("analyze",),
+                ),
+                PlanStep(
+                    "synthesize",
+                    f"Synthesize the verified findings into a concise answer for: {goal}",
+                    "reasoning",
+                    ("verify",),
+                ),
             )
         elif task_type == "coding" or any(x in lower for x in ("build", "fix", "implement")):
             steps = (
                 PlanStep("analyze", f"Analyze requirements and constraints: {goal}", "reasoning"),
                 PlanStep("implement", goal, "coding", ("analyze",)),
-                PlanStep("review", f"Review the proposed implementation for: {goal}", "reasoning", ("implement",)),
+                PlanStep("test", f"Test the proposed implementation for: {goal}", "coding", ("implement",)),
+                PlanStep(
+                    "review",
+                    f"Review the implementation and test results for correctness: {goal}",
+                    "reasoning",
+                    ("test",),
+                ),
+                PlanStep(
+                    "synthesize",
+                    f"Summarize the implementation, test results, and remaining issues for: {goal}",
+                    "reasoning",
+                    ("review",),
+                ),
+            )
+        elif any(x in lower for x in ("analyze", "recommend", "compare", "architecture", "evaluate")):
+            steps = (
+                PlanStep("analyze", goal, "reasoning"),
+                PlanStep(
+                    "review",
+                    f"Critically review the analysis and identify risks or missing considerations: {goal}",
+                    "reasoning",
+                    ("analyze",),
+                ),
+                PlanStep(
+                    "synthesize",
+                    f"Produce a concise recommendation based on the analysis and review: {goal}",
+                    "reasoning",
+                    ("review",),
+                ),
             )
         else:
             steps = (PlanStep("solve", goal, task_type),)
