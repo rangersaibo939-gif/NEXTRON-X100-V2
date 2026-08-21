@@ -1,6 +1,10 @@
 name: NEXTRON V2 Autonomous Builder
 
 on:
+  push:
+    branches: [feature/nextron-builder-v2]
+  pull_request:
+    branches: [main, feature/nextron-builder-v2]
   workflow_dispatch:
   schedule:
     - cron: "17,47 * * * *"
@@ -15,6 +19,7 @@ permissions:
 
 jobs:
   autonomous:
+    if: ${{ !contains(github.event.head_commit.message || '', '[nextron-agent]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -23,7 +28,7 @@ jobs:
       NEXTRON_AGENT_MAX_ITERATIONS: "5"
     steps:
       - name: Checkout working branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
         with:
           ref: feature/nextron-builder-v2
           fetch-depth: 0
@@ -35,13 +40,13 @@ jobs:
           python-version: "3.13"
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "9.7"
 
@@ -50,18 +55,23 @@ jobs:
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Verify baseline
+        run: |
+          python -m py_compile core/nextron.py core/app_plan.py core/ai_planner.py
+          python -m pytest -q
+
       - name: Run autonomous coding loop
         if: ${{ env.OPENROUTER_API_KEY != '' }}
         run: python tools/nextron_agent.py
 
-      - name: Stop with setup instructions when API key is missing
+      - name: Explain missing API key
         if: ${{ env.OPENROUTER_API_KEY == '' }}
         run: |
           echo "OPENROUTER_API_KEY is not configured."
-          echo "Add it as a repository Actions secret, then run this workflow manually."
+          echo "Add it as a repository Actions secret to enable autonomous coding."
           exit 1
 
-      - name: Verify final state
+      - name: Final validation
         run: |
           python -m py_compile core/nextron.py core/app_plan.py core/ai_planner.py
           python -m pytest -q
@@ -75,6 +85,6 @@ jobs:
           fi
           git config user.name "nextron-autonomous-agent"
           git config user.email "nextron-autonomous-agent@users.noreply.github.com"
-          git add -- core .github tools NEXTRON_V2_AUTONOMOUS.md
+          git add -- core .github tools tests docs NEXTRON_V2_AUTONOMOUS.md test_*.py
           git commit -m "[nextron-agent] autonomous V2 progress"
           git push origin feature/nextron-builder-v2
