@@ -2,7 +2,7 @@ name: NEXTRON Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/nextron-builder-v2]
   pull_request:
   workflow_dispatch:
 
@@ -19,5 +19,4 @@ jobs:
       - name: Install pytest
         run: python -m pip install pytest
       - name: Run tests
-        working-directory: core
         run: python -m pytest -q

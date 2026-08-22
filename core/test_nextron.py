@@ -1,39 +1,25 @@
-from nextron import AIModel, register_model, classify_task, choose_model
+from core.model_registry import ModelProfile, ModelRegistry
+from core.router_engine import Router
 
 
-def setup_models():
-    register_model(
-        AIModel(
-            name="Coding Specialist",
-            provider="test",
-            coding=95,
-            reasoning=80,
-            reliability=90,
-            speed=80,
-        )
+def make_router() -> Router:
+    registry = ModelRegistry(
+        [
+            ModelProfile("Coding Specialist", "test", coding=95, reasoning=80, reliability=90, speed=80),
+            ModelProfile("Research Specialist", "test", research=95, reasoning=90, reliability=92, speed=75),
+        ]
     )
-
-    register_model(
-        AIModel(
-            name="Research Specialist",
-            provider="test",
-            research=95,
-            reasoning=90,
-            reliability=92,
-            speed=75,
-        )
-    )
+    return Router(registry)
 
 
 def test_task_classification():
-    assert classify_task("Debug my Android Kotlin build") == "coding"
-    assert classify_task("Research the latest AI models") == "research"
+    assert Router.classify("Debug my Android Kotlin build") == "coding"
+    assert Router.classify("Research the latest AI models") == "research"
 
 
 def test_model_selection():
-    setup_models()
+    router = make_router()
+    decision = router.choose("Debug my Android Kotlin build")
 
-    selected = choose_model("Debug my Android Kotlin build")
-
-    assert selected is not None
-    assert selected.name == "Coding Specialist"
+    assert decision is not None
+    assert decision.model.name == "Coding Specialist"
