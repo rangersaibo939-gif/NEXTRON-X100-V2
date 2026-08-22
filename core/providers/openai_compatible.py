@@ -64,6 +64,8 @@ class OpenAICompatibleProvider(AIProvider):
                 f"Missing {self.api_key_env}",
             )
 
+        # Do not force response_format here. OpenAI-compatible providers differ
+        # in structured-output support, and the planner already validates JSON.
         payload = {
             "model": self.model,
             "messages": [
@@ -81,7 +83,6 @@ class OpenAICompatibleProvider(AIProvider):
                 },
             ],
             "temperature": 0,
-            "response_format": {"type": "json_object"},
         }
 
         body_bytes = json.dumps(payload).encode("utf-8")
