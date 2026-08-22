@@ -22,8 +22,8 @@ def test_generator_materializes_plan_and_compose_project(tmp_path: Path):
     activity = (root / "app/src/main/java/com/nextron/expenses/MainActivity.kt").read_text()
     plan = json.loads((root / "app/src/main/assets/nextron_plan.json").read_text())
 
-    assert 'id("com.android.application") version "9.3.1"' in build_file
-    assert 'id("org.jetbrains.kotlin.plugin.compose") version "2.3.21"' in build_file
+    assert 'id("com.android.application") version "8.7.3"' in build_file
+    assert 'id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"' in build_file
     assert "Expense Tracker" in activity
     assert "Add Expense" in activity
     assert "Monthly totals" in activity
