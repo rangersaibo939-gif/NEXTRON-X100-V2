@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -24,6 +26,68 @@ def _copy_apk_to_downloads(apk: Path, app_name: str) -> Path | None:
         return destination
     except (OSError, PermissionError):
         return None
+
+
+def _android_shell(*args: str) -> tuple[int, str]:
+    try:
+        proc = subprocess.run(
+            list(args),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        return proc.returncode, proc.stdout.strip()
+    except OSError as exc:
+        return 127, str(exc)
+
+
+def _install_and_smoke_test(apk: Path, package_name: str, project_dir: Path) -> bool:
+    """Install through a shared-storage path and capture launch/runtime diagnostics.
+
+    Termux's private /data/data path is intentionally unreadable by system_server.
+    Copying to shared storage first lets `cmd package install` consume the APK.
+    This removes the old manual copy/install loop and preserves the exact runtime
+    log under the generated project for later diagnosis.
+    """
+    if os.environ.get("NEXTRON_AUTO_INSTALL", "1").lower() in {"0", "false", "no"}:
+        return False
+    if not Path("/data/data/com.termux").exists():
+        return False
+
+    install_path = Path("/storage/emulated/0/Download/.nextron-install.apk")
+    runtime_log = project_dir / "nextron-runtime.log"
+    try:
+        install_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(apk, install_path)
+    except OSError as exc:
+        runtime_log.write_text(f"INSTALL COPY FAILED: {exc}\n", encoding="utf-8")
+        return False
+
+    install_rc, install_out = _android_shell(
+        "cmd", "package", "install", "-r", str(install_path)
+    )
+
+    launch_rc = 1
+    launch_out = ""
+    if install_rc == 0:
+        launch_rc, launch_out = _android_shell(
+            "am", "start", "-S", "-W", "-n", f"{package_name}/.MainActivity"
+        )
+
+    log_rc, log_out = _android_shell("logcat", "-d", "-v", "threadtime", "-t", "5000")
+    runtime_log.write_text(
+        "===== NEXTRON AUTOMATIC ANDROID SMOKE TEST =====\n"
+        f"APK: {apk}\nPACKAGE: {package_name}\n\n"
+        f"===== INSTALL rc={install_rc} =====\n{install_out}\n\n"
+        f"===== LAUNCH rc={launch_rc} =====\n{launch_out}\n\n"
+        f"===== LOGCAT rc={log_rc} =====\n{log_out}\n",
+        encoding="utf-8",
+    )
+
+    # Keep the shared copy because it is also the easiest path for the user to
+    # open/install manually if Android's package manager rejects the shell call.
+    return install_rc == 0 and launch_rc == 0
 
 
 def main(request: str) -> int:
@@ -85,7 +149,7 @@ def main(request: str) -> int:
         project_name=plan.app_name,
         package_name=plan.package_name,
         working_directory=str(generated.root),
-        target_sdk=35,
+        target_sdk=36,
         min_sdk=26,
         build_type="debug",
     )
@@ -121,8 +185,14 @@ def main(request: str) -> int:
     destination = _copy_apk_to_downloads(apk, plan.app_name)
     if destination:
         print(f"DOWNLOAD APK: {destination}")
+
+    if _install_and_smoke_test(apk, plan.package_name, generated.root):
+        print("ANDROID INSTALL: SUCCESS")
+        print("ANDROID LAUNCH: SUCCESS")
+        print(f"RUNTIME LOG: {generated.root / 'nextron-runtime.log'}")
     else:
-        print("WARNING: could not copy APK to Downloads; source artifact remains available")
+        print("ANDROID INSTALL/LAUNCH: NOT CONFIRMED")
+        print(f"RUNTIME LOG: {generated.root / 'nextron-runtime.log'}")
 
     print("==============================")
     print("NEXTRON BUILD COMPLETE")
