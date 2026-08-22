@@ -24,7 +24,9 @@ jobs:
     timeout-minutes: 55
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      NEXTRON_AGENT_MODEL: openrouter/auto
+      # Use OpenRouter's zero-cost router so the autonomous loop can operate
+      # on a fresh/free OpenRouter account without purchased credits.
+      NEXTRON_AGENT_MODEL: openrouter/free
       NEXTRON_AGENT_MAX_ITERATIONS: "5"
     steps:
       - name: Checkout working branch
