@@ -72,8 +72,7 @@ jobs:
         if: ${{ env.OPENROUTER_API_KEY == '' }}
         run: |
           echo "OPENROUTER_API_KEY is not configured."
-          echo "Add it as a repository Actions secret to enable autonomous coding."
-          exit 1
+          echo "Skipping autonomous coding loop; final validation will continue."
 
       - name: Final validation
         run: |
