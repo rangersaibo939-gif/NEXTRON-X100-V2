@@ -85,7 +85,7 @@ def main(request: str) -> int:
         project_name=plan.app_name,
         package_name=plan.package_name,
         working_directory=str(generated.root),
-        target_sdk=35,
+        target_sdk=36,
         min_sdk=26,
         build_type="debug",
     )
