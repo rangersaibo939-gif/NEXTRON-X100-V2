@@ -1,18 +1,10 @@
-from pathlib import Path
-
-
 def test_nextron_main_wires_multi_brain_into_planner(monkeypatch, tmp_path, capsys):
     import core.nextron as nextron
     from core.app_builder.contracts import BuildArtifact, BuildResult, BuildStage
-    from core.ai_planner import AppPlan
-    from core.multi_brain import BrainResult, MultiBrainResult
+    from core.app_plan import AppPlan
 
     calls = []
-
-    class FakeProviders(dict):
-        pass
-
-    providers = FakeProviders({"reasoner": object(), "coder": object(), "researcher": object()})
+    providers = {"reasoner": object(), "coder": object(), "researcher": object()}
 
     def fake_build_providers():
         calls.append("providers")
@@ -27,6 +19,7 @@ def test_nextron_main_wires_multi_brain_into_planner(monkeypatch, tmp_path, caps
     class FakePlanner:
         def __init__(self, provider):
             calls.append(("planner-init", provider))
+            assert provider is providers["reasoner"]
 
         def plan(self, task):
             calls.append(("planner-plan", task))
@@ -35,11 +28,12 @@ def test_nextron_main_wires_multi_brain_into_planner(monkeypatch, tmp_path, caps
                 app_name="Calculator",
                 package_name="com.nextron.calculator",
                 description="A calculator",
-                screens=["Home"],
-                features=["calculate"],
-                actions=["calculate"],
-                theme="dark",
-                data_model=[],
+                platform="android",
+                screens=("Home",),
+                features=("calculate",),
+                theme={"mode": "dark"},
+                data_model={},
+                actions=("calculate",),
             )
 
     class FakeGenerated:
@@ -73,7 +67,12 @@ def test_nextron_main_wires_multi_brain_into_planner(monkeypatch, tmp_path, caps
     monkeypatch.chdir(tmp_path)
 
     assert nextron.main("Build a calculator") == 0
-    assert calls[:4] == ["providers", "multi-brain", ("planner-init", providers["reasoner"]), ("planner-plan", "CONSENSUS: build a calculator")]
+    assert calls[:4] == [
+        "providers",
+        "multi-brain",
+        ("planner-init", providers["reasoner"]),
+        ("planner-plan", "CONSENSUS: build a calculator"),
+    ]
     assert "generate" in calls
     assert "build" in calls
 
