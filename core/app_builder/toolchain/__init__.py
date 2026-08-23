@@ -46,9 +46,8 @@ class ToolchainRegistry:
     @staticmethod
     def _needs_gradle(request: BuildRequest) -> bool:
         """Kotlin/Compose and Gradle project files require the Gradle backend."""
-        sources = getattr(request, "source_files", {})
-        resources = getattr(request, "resource_files", {})
-        paths = list(sources) + list(resources)
+        paths = list(getattr(request, "source_files", {}) or {})
+        paths += list(getattr(request, "resource_files", {}) or {})
         return any(path.endswith(".kt") or path.endswith(".kts") for path in paths)
 
     def select(self, request: BuildRequest) -> Optional[ToolchainAdapter]:

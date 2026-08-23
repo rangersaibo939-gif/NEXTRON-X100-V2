@@ -81,7 +81,7 @@ include(":app")
 """
 
         root_gradle = """plugins {
-    id("com.android.application") version "8.7.3" apply false
+    id("com.android.application") version "8.9.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
 }
 """
@@ -93,17 +93,23 @@ include(":app")
 
 android {{
     namespace = "{package_name}"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {{
         applicationId = "{package_name}"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }}
     buildFeatures {{
         compose = true
     }}
+
+    compileOptions {{
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }}
+
 }}
 
 dependencies {{
