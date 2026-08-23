@@ -86,7 +86,9 @@ def main(request: str) -> int:
         return 2
 
     providers = build_providers()
-    provider = providers.get("openrouter") or providers.get("groq")
+    provider = providers.get("reasoner") or providers.get("openrouter") or providers.get("groq")
+    if provider is None and providers:
+        provider = next(iter(providers.values()))
     if provider is None:
         print("ERROR: no AI provider configured")
         return 2
