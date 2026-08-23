@@ -97,7 +97,7 @@ android {{
     defaultConfig {{
         applicationId = "{package_name}"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }}
@@ -145,7 +145,7 @@ kotlin.code.style=official
         )
 
         feature_lines = "\n".join(
-            f'                        Text("• {kotlin_string(clean(feature))}")'
+            f'                        Text("{kotlin_string(clean(feature))}")'
             for feature in features
             if clean(feature)
         ) or '                        Text("Ready to use")'
