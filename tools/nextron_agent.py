@@ -184,7 +184,14 @@ def main() -> int:
         else:
             last_validation = validation
 
-        response = ask_model(snapshot(), last_validation, iteration)
+        try:
+            response = ask_model(snapshot(), last_validation, iteration)
+        except Exception as exc:
+            print(f"AUTONOMOUS AGENT: Model API call failed: {exc}")
+            if ok:
+                print("AUTONOMOUS AGENT: Validation checks are currently green; exiting autonomous loop cleanly.")
+                return 0
+            raise
         if not apply_response(response):
             return 0
 
