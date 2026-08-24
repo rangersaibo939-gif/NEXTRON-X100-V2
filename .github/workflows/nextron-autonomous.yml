@@ -2,9 +2,10 @@ name: NEXTRON V2 Autonomous Builder
 
 on:
   push:
-    branches: [feature/nextron-builder-v2]
+    branches:
+      - 'feature/**'
   pull_request:
-    branches: [main, feature/nextron-builder-v2]
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "17,47 * * * *"
@@ -16,6 +17,9 @@ concurrency:
 
 permissions:
   contents: write
+
+env:
+  WORKING_BRANCH: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   autonomous:
@@ -30,7 +34,7 @@ jobs:
       - name: Checkout working branch
         uses: actions/checkout@v4
         with:
-          ref: feature/nextron-builder-v2
+          ref: ${{ env.WORKING_BRANCH }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -90,4 +94,4 @@ jobs:
           git config user.email "nextron-autonomous-agent@users.noreply.github.com"
           git add -- core .github tools tests docs NEXTRON_V2_AUTONOMOUS.md test_*.py
           git commit -m "[nextron-agent] autonomous V2 progress"
-          git push origin feature/nextron-builder-v2
+          git push origin "HEAD:${WORKING_BRANCH}"
