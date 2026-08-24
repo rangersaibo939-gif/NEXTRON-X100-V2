@@ -11,6 +11,7 @@ from core.app_builder.contracts import BuildRequest
 from core.app_builder.pipeline import AppBuildPipeline
 from core.app_builder.project_generator import AndroidProjectGenerator
 from core.app_builder.toolchain.gradle_backend import GradleAndroidAdapter
+from core.multi_brain import MultiBrainOrchestrator
 from core.providers.catalog import build_providers
 
 
@@ -18,9 +19,7 @@ def _copy_apk_to_downloads(apk: Path, app_name: str) -> Path | None:
     downloads = Path("/storage/emulated/0/Download")
     try:
         downloads.mkdir(parents=True, exist_ok=True)
-        safe_app_name = "".join(
-            c if c.isalnum() or c in " _-" else "_" for c in app_name
-        ).strip() or "NEXTRON_App"
+        safe_app_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in app_name).strip() or "NEXTRON_App"
         destination = downloads / f"{safe_app_name}.apk"
         shutil.copy2(apk, destination)
         return destination
@@ -30,26 +29,13 @@ def _copy_apk_to_downloads(apk: Path, app_name: str) -> Path | None:
 
 def _android_shell(*args: str) -> tuple[int, str]:
     try:
-        proc = subprocess.run(
-            list(args),
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        proc = subprocess.run(list(args), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
         return proc.returncode, proc.stdout.strip()
     except OSError as exc:
         return 127, str(exc)
 
 
 def _install_and_smoke_test(apk: Path, package_name: str, project_dir: Path) -> bool:
-    """Install through a shared-storage path and capture launch/runtime diagnostics.
-
-    Termux's private /data/data path is intentionally unreadable by system_server.
-    Copying to shared storage first lets `cmd package install` consume the APK.
-    This removes the old manual copy/install loop and preserves the exact runtime
-    log under the generated project for later diagnosis.
-    """
     if os.environ.get("NEXTRON_AUTO_INSTALL", "1").lower() in {"0", "false", "no"}:
         return False
     if not Path("/data/data/com.termux").exists():
@@ -64,17 +50,10 @@ def _install_and_smoke_test(apk: Path, package_name: str, project_dir: Path) -> 
         runtime_log.write_text(f"INSTALL COPY FAILED: {exc}\n", encoding="utf-8")
         return False
 
-    install_rc, install_out = _android_shell(
-        "cmd", "package", "install", "-r", str(install_path)
-    )
-
-    launch_rc = 1
-    launch_out = ""
+    install_rc, install_out = _android_shell("cmd", "package", "install", "-r", str(install_path))
+    launch_rc, launch_out = 1, ""
     if install_rc == 0:
-        launch_rc, launch_out = _android_shell(
-            "am", "start", "-S", "-W", "-n", f"{package_name}/.MainActivity"
-        )
-
+        launch_rc, launch_out = _android_shell("am", "start", "-S", "-W", "-n", f"{package_name}/.MainActivity")
     log_rc, log_out = _android_shell("logcat", "-d", "-v", "threadtime", "-t", "5000")
     runtime_log.write_text(
         "===== NEXTRON AUTOMATIC ANDROID SMOKE TEST =====\n"
@@ -84,10 +63,20 @@ def _install_and_smoke_test(apk: Path, package_name: str, project_dir: Path) -> 
         f"===== LOGCAT rc={log_rc} =====\n{log_out}\n",
         encoding="utf-8",
     )
-
-    # Keep the shared copy because it is also the easiest path for the user to
-    # open/install manually if Android's package manager rejects the shell call.
     return install_rc == 0 and launch_rc == 0
+
+
+def _multi_brain_context(task: str, providers: dict) -> str:
+    """Ask specialist brains first, then pass their consensus to the app planner."""
+    orchestrator = MultiBrainOrchestrator(providers)
+    result = orchestrator.run(task)
+    print("Multi-Brain: specialist consensus ready")
+    for item in result.results:
+        status = "OK" if item.success else f"FAILED: {item.error}"
+        print(f"  {item.role}: {status} ({item.provider}/{item.model})")
+    print("Multi-Brain consensus:")
+    print(result.consensus)
+    return result.consensus
 
 
 def main(request: str) -> int:
@@ -97,19 +86,22 @@ def main(request: str) -> int:
         return 2
 
     providers = build_providers()
-    provider = providers.get("openrouter") or providers.get("groq")
+    provider = providers.get("reasoner") or providers.get("openrouter") or providers.get("groq")
+    if provider is None and providers:
+        provider = next(iter(providers.values()))
     if provider is None:
         print("ERROR: no AI provider configured")
         return 2
 
     print("NEXTRON X-100")
     print("==============================")
-    print("Stage 1/4: AI planning...")
+    print("Stage 1/4: Multi-Brain planning...")
 
     try:
-        plan = AIPlanner(provider).plan(request)
+        planned_request = _multi_brain_context(request, providers)
+        plan = AIPlanner(provider).plan(planned_request)
     except Exception as exc:
-        print(f"FAILED [planning]: {exc}")
+        print(f"FAILED [multi-brain planning]: {exc}")
         return 1
 
     print("Plan: VALID")
@@ -127,38 +119,23 @@ def main(request: str) -> int:
 
     try:
         generated = AndroidProjectGenerator().generate(
-            str(project_dir),
-            plan.package_name,
-            plan.app_name,
-            description=plan.description,
-            screens=plan.screens,
-            features=plan.features,
-            actions=plan.actions,
-            theme=plan.theme,
-            data_model=plan.data_model,
+            str(project_dir), plan.package_name, plan.app_name,
+            description=plan.description, screens=plan.screens, features=plan.features,
+            actions=plan.actions, theme=plan.theme, data_model=plan.data_model,
         )
     except Exception as exc:
         print(f"FAILED [generation]: {exc}")
         return 1
 
     print(f"Project: {generated.root}")
-
     print("Stage 3/4: Gradle Android build...")
     request_obj = BuildRequest(
-        project_id=plan.package_name,
-        project_name=plan.app_name,
-        package_name=plan.package_name,
-        working_directory=str(generated.root),
-        target_sdk=36,
-        min_sdk=26,
-        build_type="debug",
+        project_id=plan.package_name, project_name=plan.app_name, package_name=plan.package_name,
+        working_directory=str(generated.root), target_sdk=36, min_sdk=26, build_type="debug",
     )
 
     try:
-        result = AppBuildPipeline(
-            adapter=GradleAndroidAdapter(),
-            max_repairs=0,
-        ).build(request_obj)
+        result = AppBuildPipeline(adapter=GradleAndroidAdapter(), max_repairs=0).build(request_obj)
     except Exception as exc:
         print(f"FAILED [gradle]: {exc}")
         return 1
@@ -168,12 +145,11 @@ def main(request: str) -> int:
         print(f"Failed stage: {result.failed_stage.value if result.failed_stage else 'unknown'}")
         print(f"Error: {result.error_message}")
         return 1
-
-    print("BUILD SUCCESS")
     if not result.artifacts:
         print("FAILED: Gradle returned no APK")
         return 1
 
+    print("BUILD SUCCESS")
     apk = Path(result.artifacts[0].path).resolve()
     print("Stage 4/4: APK verification...")
     if not apk.is_file() or apk.stat().st_size <= 0:
@@ -189,11 +165,9 @@ def main(request: str) -> int:
     if _install_and_smoke_test(apk, plan.package_name, generated.root):
         print("ANDROID INSTALL: SUCCESS")
         print("ANDROID LAUNCH: SUCCESS")
-        print(f"RUNTIME LOG: {generated.root / 'nextron-runtime.log'}")
     else:
         print("ANDROID INSTALL/LAUNCH: NOT CONFIRMED")
-        print(f"RUNTIME LOG: {generated.root / 'nextron-runtime.log'}")
-
+    print(f"RUNTIME LOG: {generated.root / 'nextron-runtime.log'}")
     print("==============================")
     print("NEXTRON BUILD COMPLETE")
     return 0
@@ -202,8 +176,5 @@ def main(request: str) -> int:
 if __name__ == "__main__":
     request = " ".join(sys.argv[1:]).strip()
     if not request:
-        request = (
-            "Build a simple expense tracker with a dark UI, "
-            "an add expense button, categories and monthly total."
-        )
+        request = "Build a simple expense tracker with a dark UI, an add expense button, categories and monthly total."
     raise SystemExit(main(request))
