@@ -88,3 +88,28 @@ def test_multi_brain_module_imports():
     assert MultiBrainOrchestrator.ROLE_CAPABILITIES["coder"] == "coding"
     assert MultiBrainOrchestrator.ROLE_CAPABILITIES["reasoner"] == "reasoning"
     assert MultiBrainOrchestrator.ROLE_CAPABILITIES["researcher"] == "research"
+
+
+def test_multi_brain_keeps_successful_outputs_when_judge_raises():
+    from core.multi_brain import MultiBrainOrchestrator
+    from core.providers.base import AIResponse
+
+    class Provider:
+        name = "fake"
+        capabilities = {"coding": 1, "reasoning": 2, "research": 1}
+
+        def is_available(self):
+            return True
+
+        def generate(self, prompt):
+            if "lead judge" in prompt:
+                raise RuntimeError("judge unavailable")
+            role = "coder" if "coder brain" in prompt else "researcher"
+            return AIResponse(success=True, text=f"{role} answer", provider=self.name, model="test")
+
+    result = MultiBrainOrchestrator({"fake": Provider()}).run(
+        "Build an app", roles=("coder", "researcher")
+    )
+
+    assert result.consensus == "coder answer\n\nresearcher answer"
+    assert all(item.success for item in result.results)
