@@ -7,6 +7,7 @@ and repeats until the V2 acceptance checks pass or the iteration budget ends.
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -72,8 +73,6 @@ def validate() -> tuple[bool, str]:
         if rc != 0:
             return False, "\n\n".join(output)
 
-    # Exercise the actual Android generator and Gradle toolchain without
-    # depending on the local Termux environment.
     generator = """
 from pathlib import Path
 from core.app_builder.project_generator import AndroidProjectGenerator
@@ -141,13 +140,14 @@ Do not use markdown fences around the patch. Do not explain outside the required
 Inspect the code and validation output. Implement the highest-value missing piece now.
 """
     body = {"model": MODEL, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "temperature": 0.1, "max_tokens": 12000}
-    import json
     request = urllib.request.Request(API, data=json.dumps(body).encode(), headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "X-Title": "NEXTRON V2 Autonomous Builder"}, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=180) as response:
             payload = json.loads(response.read().decode())
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")
+        if exc.code == 402:
+            raise RuntimeError("OpenRouter credits unavailable (HTTP 402); autonomous AI iteration is unavailable, but validation may still be green.") from exc
         raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail[:2000]}") from exc
     text = payload["choices"][0]["message"]["content"].strip()
     return text
