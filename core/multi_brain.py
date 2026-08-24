@@ -42,8 +42,12 @@ class MultiBrainOrchestrator:
         capability = self.ROLE_CAPABILITIES[role]
         candidates = []
         for provider in self.providers.values():
-            score = (getattr(provider, "capabilities", {}) or {}).get(capability, 0)
-            if score and provider.is_available():
+            try:
+                score = (getattr(provider, "capabilities", {}) or {}).get(capability, 0)
+                available = provider.is_available()
+            except Exception:
+                continue
+            if score and available:
                 candidates.append((score, provider))
         return max(candidates, key=lambda item: item[0])[1] if candidates else None
 
@@ -105,7 +109,14 @@ class MultiBrainOrchestrator:
             if judge is None:
                 consensus = "\n\n".join(r.text for r in successful)
             else:
-                response = judge.generate("\n".join(prompt))
-                consensus = response.text.strip() if response.success and response.text.strip() else "\n\n".join(r.text for r in successful)
+                try:
+                    response = judge.generate("\n".join(prompt))
+                except Exception:
+                    response = None
+                if response is not None and response.success and response.text.strip():
+                    consensus = response.text.strip()
+                else:
+                    # A judge/provider failure must not discard successful specialist work.
+                    consensus = "\n\n".join(r.text for r in successful)
 
         return MultiBrainResult(task, tuple(results), consensus)
