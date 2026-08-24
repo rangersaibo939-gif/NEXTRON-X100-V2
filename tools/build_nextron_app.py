@@ -1,4 +1,12 @@
 from pathlib import Path
+import sys
+
+# When this file is executed directly (python tools/build_nextron_app.py),
+# Python puts tools/ on sys.path rather than the repository root.
+# Add the root so the core package can be imported reliably in CI and locally.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from core.app_builder.project_generator import AndroidProjectGenerator
 
