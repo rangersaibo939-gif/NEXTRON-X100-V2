@@ -2,7 +2,6 @@ from pathlib import Path
 
 from core.app_builder.project_generator import AndroidProjectGenerator
 
-
 APP_NAME = "NEXTRON X-100"
 PACKAGE = "com.nextron.x100"
 
@@ -25,8 +24,8 @@ def build_project(output: str) -> Path:
 
 if __name__ == "__main__":
     import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("output")
+    parser = argparse.ArgumentParser(description="Generate the NEXTRON X-100 Android app")
+    parser.add_argument("output", help="Directory for the generated Android project")
     args = parser.parse_args()
+    print(f"Generating {APP_NAME} in {args.output}")
     print(build_project(args.output))
