@@ -168,9 +168,9 @@ kotlin.code.style=official
             title = kotlin_string(clean(screen) or f"Screen {index + 1}")
             screen_cases.append(
                 f'''                    {index} -> Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        verticalArrangement = Arrangement.Top
                     ) {{
                         Text("{title}", style = MaterialTheme.typography.headlineSmall)
                         Spacer(modifier = Modifier.height(12.dp))
@@ -207,6 +207,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -236,10 +238,16 @@ fun NextronApp() {{
     var actionCount by remember {{ mutableIntStateOf(0) }}
     var lastAction by remember {{ mutableStateOf("") }}
     val colors = if ({str(use_dark_theme).lower()}) darkColorScheme() else lightColorScheme()
+    val scrollState = rememberScrollState()
 
     MaterialTheme(colorScheme = colors) {{
         Surface(modifier = Modifier.fillMaxSize()) {{
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {{
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(16.dp)
+            ) {{
                 Text("{safe_name}", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {{
