@@ -6,16 +6,12 @@ def make_interactive(project_root: str) -> Path:
     source = next(Path(project_root).glob("app/src/main/java/**/MainActivity.kt"))
     text = source.read_text(encoding="utf-8")
     text = text.replace(
-        "import android.os.Bundle\n",
-        "import android.os.Bundle\nimport android.content.Intent\nimport android.net.Uri\n",
-    )
-    text = text.replace(
         "import androidx.compose.material3.MaterialTheme\n",
-        "import androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.OutlinedTextField\nimport androidx.compose.ui.platform.LocalContext\n",
+        "import androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.OutlinedTextField\n",
     )
     text = text.replace(
         '    var lastAction by remember { mutableStateOf("") }\n',
-        '    var lastAction by remember { mutableStateOf("") }\n    var taskRequest by remember { mutableStateOf("") }\n    val context = LocalContext.current\n',
+        '    var lastAction by remember { mutableStateOf("") }\n    var taskRequest by remember { mutableStateOf("") }\n',
     )
     text = text.replace(
         '                Spacer(modifier = Modifier.height(20.dp))\n                when (currentScreen) {',
@@ -24,8 +20,8 @@ def make_interactive(project_root: str) -> Path:
     replacements = {
         'Button(onClick = { lastAction = "Create App"; actionCount++ }) { Text("Create App") }': 'Button(onClick = { lastAction = if (taskRequest.isBlank()) "Enter an app request first" else "App request captured: $taskRequest"; actionCount++ }) { Text("Create App") }',
         'Button(onClick = { lastAction = "Run Agent"; actionCount++ }) { Text("Run Agent") }': 'Button(onClick = { lastAction = if (taskRequest.isBlank()) "Create an app request first" else "Multi-brain plan ready: Planner → Coder → Reviewer"; actionCount++ }) { Text("Run Agent") }',
-        'Button(onClick = { lastAction = "Build APK"; actionCount++ }) { Text("Build APK") }': 'Button(onClick = { lastAction = "Opening GitHub Actions — tap Run workflow"; context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/rangersaibo939-gif/NEXTRON-X100-V2/actions/workflows/nextron-builder-v2.yml"))); actionCount++ }) { Text("Build APK") }',
-        'Button(onClick = { lastAction = "Download APK"; actionCount++ }) { Text("Download APK") }': 'Button(onClick = { lastAction = "Opening GitHub Actions artifacts"; context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/rangersaibo939-gif/NEXTRON-X100-V2/actions"))); actionCount++ }) { Text("Download APK") }',
+        'Button(onClick = { lastAction = "Build APK"; actionCount++ }) { Text("Build APK") }': 'Button(onClick = { lastAction = "APK build is handled by the latest Builder pipeline; no browser launch needed"; actionCount++ }) { Text("Build APK") }',
+        'Button(onClick = { lastAction = "Download APK"; actionCount++ }) { Text("Download APK") }': 'Button(onClick = { lastAction = "Use the latest generated APK artifact"; actionCount++ }) { Text("Download APK") }',
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
