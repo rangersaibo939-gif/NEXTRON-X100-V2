@@ -9,6 +9,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from core.app_builder.project_generator import AndroidProjectGenerator
 from tools.interactive_console import make_interactive
+from tools.dashboard_scroll_fix import fix_generated_dashboard
 
 APP_NAME = "NEXTRON X-100"
 PACKAGE = "com.nextron.x100"
@@ -27,6 +28,7 @@ def build_project(output: str) -> Path:
         data_model={"activeTask": "string", "buildStatus": "string", "artifactPath": "string"},
         actions=("Create App", "Run Agent", "Build APK", "Download APK"),
     )
+    fix_generated_dashboard(str(root))
     make_interactive(str(root))
     return root
 
