@@ -1,0 +1,1 @@
+Build APK must not launch a browser.
