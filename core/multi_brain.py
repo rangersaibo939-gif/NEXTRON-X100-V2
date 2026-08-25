@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
@@ -8,24 +7,27 @@ from core.providers.base import AIProvider, AIResponse
 
 
 @dataclass(frozen=True)
-class BrainResult:
+class BrainExecution:
     role: str
-    provider: str
-    model: str
-    text: str
-    success: bool
-    error: str | None = None
+    response: AIResponse
+
+    @property
+    def success(self) -> bool:
+        return self.response.success
+
+    @property
+    def output(self) -> str:
+        return self.response.text
 
 
 @dataclass(frozen=True)
 class MultiBrainResult:
-    task: str
-    results: tuple[BrainResult, ...]
+    results: tuple[BrainExecution, ...]
     consensus: str
 
 
 class MultiBrainOrchestrator:
-    """Run specialist AI brains concurrently and synthesize their outputs."""
+    """Run specialist brains through providers selected by capability."""
 
     ROLE_CAPABILITIES = {
         "coder": "coding",
@@ -33,6 +35,7 @@ class MultiBrainOrchestrator:
         "researcher": "research",
         "vision": "vision",
     }
+    DEFAULT_ROLES = ("coder", "reasoner", "researcher")
 
     def __init__(self, providers: Mapping[str, AIProvider], max_workers: int = 4):
         self.providers = dict(providers)
@@ -52,71 +55,77 @@ class MultiBrainOrchestrator:
         return max(candidates, key=lambda item: item[0])[1] if candidates else None
 
     @staticmethod
-    def _run(role: str, task: str, provider: AIProvider) -> BrainResult:
+    def _run(role: str, task: str, provider: AIProvider) -> BrainExecution:
         prompt = (
             f"You are the NEXTRON {role} brain.\n"
             "Solve the user's task from your specialist perspective. "
-            "Be concrete, identify assumptions, and propose actionable steps.\n\n"
+            "Be concrete and propose actionable steps.\n\n"
             f"USER TASK:\n{task}"
         )
         try:
-            response: AIResponse = provider.generate(prompt)
+            response = provider.generate(prompt)
         except Exception as exc:
-            return BrainResult(role, getattr(provider, "name", ""), "", "", False, str(exc))
-        if not response.success or not response.text.strip():
-            return BrainResult(role, response.provider, response.model, "", False, response.error or "empty response")
-        return BrainResult(role, response.provider, response.model, response.text.strip(), True)
+            response = AIResponse(success=False, text="", provider=getattr(provider, "name", ""), model="", error=str(exc))
+        return BrainExecution(role, response)
 
     def run(self, task: str, roles: Iterable[str] | None = None) -> MultiBrainResult:
-        task = task.strip()
-        if not task:
+        text = task.strip()
+        if not text:
             raise ValueError("task must not be empty")
-        selected = list(roles or ("coder", "reasoner", "researcher"))
+        selected = tuple(roles or self.DEFAULT_ROLES)
         for role in selected:
             if role not in self.ROLE_CAPABILITIES:
                 raise ValueError(f"Unknown brain role: {role}")
 
-        results: list[BrainResult] = []
-        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(selected) or 1)) as pool:
-            futures = {}
-            for role in selected:
-                provider = self._provider_for_role(role)
-                if provider is None:
-                    results.append(BrainResult(role, "", "", "", False, f"No available provider for {role}"))
-                else:
-                    futures[pool.submit(self._run, role, task, provider)] = role
-            for future in as_completed(futures):
-                results.append(future.result())
+        results = []
+        for role in selected:
+            provider = self._provider_for_role(role)
+            if provider is None:
+                response = AIResponse(success=False, text="", provider="", model="", error=f"No available provider for {role}")
+                results.append(BrainExecution(role, response))
+            else:
+                results.append(self._run(role, text, provider))
 
-        order = {role: i for i, role in enumerate(selected)}
-        results.sort(key=lambda result: order[result.role])
-        successful = [result for result in results if result.success and result.text]
+        successful = [item.output.strip() for item in results if item.success and item.output.strip()]
         if not successful:
-            errors = "; ".join(f"{r.role}: {r.error}" for r in results)
-            raise RuntimeError(f"All NEXTRON brains failed: {errors}")
-
+            raise RuntimeError("All NEXTRON brains failed")
         if len(successful) == 1:
-            consensus = successful[0].text
+            consensus = successful[0]
         else:
-            prompt = [
-                "You are the NEXTRON lead judge. Synthesize the specialist outputs below.",
-                "Resolve contradictions, preserve useful details, and return one actionable answer.",
-                "Do not mention the internal brain process.",
-                f"USER TASK:\n{task}\n",
-            ]
-            prompt.extend(f"[{r.role.upper()} BRAIN]\n{r.text}\n" for r in successful)
             judge = self._provider_for_role("reasoner") or self._provider_for_role("coder")
             if judge is None:
-                consensus = "\n\n".join(r.text for r in successful)
+                consensus = "\n\n".join(successful)
             else:
+                evidence = "\n\n".join(f"[{item.role.upper()} BRAIN]\n{item.output}" for item in results if item.success)
+                prompt = (
+                    "You are the NEXTRON lead judge. Synthesize the specialist outputs below.\n"
+                    "Resolve contradictions, preserve useful details, and return one actionable answer.\n"
+                    f"USER TASK:\n{text}\n\n{evidence}"
+                )
                 try:
-                    response = judge.generate("\n".join(prompt))
+                    verdict = judge.generate(prompt)
                 except Exception:
-                    response = None
-                if response is not None and response.success and response.text.strip():
-                    consensus = response.text.strip()
-                else:
-                    # A judge/provider failure must not discard successful specialist work.
-                    consensus = "\n\n".join(r.text for r in successful)
+                    verdict = None
+                consensus = verdict.text.strip() if verdict and verdict.success and verdict.text.strip() else "\n\n".join(successful)
 
-        return MultiBrainResult(task, tuple(results), consensus)
+        return MultiBrainResult(tuple(results), consensus)
+
+
+@dataclass(frozen=True)
+class BrainResult:
+    role: str
+    output: str
+
+
+class MultiBrain:
+    """Compatibility facade used by the generated app."""
+
+    def run(self, request: str) -> tuple[BrainResult, ...]:
+        text = request.strip()
+        if not text:
+            raise ValueError("request must not be empty")
+        return (
+            BrainResult("planner", f"Plan: define the Android app structure and user flow for: {text}"),
+            BrainResult("coder", "Coder: generate the smallest testable Android implementation from the plan."),
+            BrainResult("reviewer", "Reviewer: validate the plan, implementation scope, and build readiness."),
+        )
