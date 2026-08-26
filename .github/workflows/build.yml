@@ -1,0 +1,56 @@
+name: Build NEXTRON X-100 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run builder tests
+        run: |
+          python -m pip install --upgrade pip pytest
+          python -m pytest -q
+
+  build-nextron-apk:
+    needs: python-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.12'
+      - name: Install Android SDK components
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Generate NEXTRON X-100 Android project
+        run: python tools/build_nextron_app.py "$RUNNER_TEMP/nextron-x100"
+      - name: Build NEXTRON X-100 debug APK
+        run: gradle -p "$RUNNER_TEMP/nextron-x100" :app:assembleDebug --no-daemon
+      - name: Upload NEXTRON X-100 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextron-x100-debug-apk
+          path: ${{ runner.temp }}/nextron-x100/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
