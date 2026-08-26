@@ -29,7 +29,7 @@ class OpenAICompatibleProvider(AIProvider):
         timeout: float = 60.0,
     ):
         self.name = name
-        self.base_url = base_url.rstrip("/")
+        self.base_url = base_url.strip().rstrip("/")
         self.model = model
         self.api_key_env = api_key_env
         self.timeout = timeout
@@ -48,6 +48,20 @@ class OpenAICompatibleProvider(AIProvider):
             speed=speed,
             context=context,
         )
+
+    @property
+    def chat_completions_url(self) -> str:
+        """Return exactly one /chat/completions suffix.
+
+        NEXTRON's UI accepts either an OpenAI-compatible base URL such as
+        https://api.groq.com/openai/v1 or the full chat-completions endpoint.
+        Normalizing here prevents the old double-suffix bug:
+        /chat/completions/chat/completions -> HTTP 404.
+        """
+        suffix = "/chat/completions"
+        if self.base_url.endswith(suffix):
+            return self.base_url
+        return f"{self.base_url}{suffix}"
 
     def is_available(self) -> bool:
         return bool(os.getenv(self.api_key_env))
@@ -87,7 +101,7 @@ class OpenAICompatibleProvider(AIProvider):
         body_bytes = json.dumps(payload).encode("utf-8")
 
         req = request.Request(
-            f"{self.base_url}/chat/completions",
+            self.chat_completions_url,
             data=body_bytes,
             headers={
                 "Authorization": f"Bearer {api_key}",
