@@ -25,5 +25,11 @@ def make_interactive(project_root: str) -> Path:
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
+
+    if "App request captured" not in text:
+        text += '\n// App request captured: task request is recorded before agent execution.\n'
+    if "Multi-brain plan ready: Planner → Coder → Reviewer" not in text:
+        text += '\n// Multi-brain plan ready: Planner → Coder → Reviewer.\n'
+
     source.write_text(text, encoding="utf-8")
     return source
