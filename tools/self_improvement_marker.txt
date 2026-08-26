@@ -1,0 +1,1 @@
+Self-improvement control center: inspect capabilities, choose next gap, create task, run planner/coder/reviewer, build/test, track APK.
