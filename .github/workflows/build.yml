@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -47,10 +47,21 @@ jobs:
         run: python tools/build_nextron_app.py "$RUNNER_TEMP/nextron-x100"
       - name: Build NEXTRON X-100 debug APK
         run: gradle -p "$RUNNER_TEMP/nextron-x100" :app:assembleDebug --no-daemon
-      - name: Upload NEXTRON X-100 APK
+      - name: Verify APK
+        run: |
+          test -f "$RUNNER_TEMP/nextron-x100/app/build/outputs/apk/debug/app-debug.apk"
+          file "$RUNNER_TEMP/nextron-x100/app/build/outputs/apk/debug/app-debug.apk"
+      - name: Upload NEXTRON X-100 APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: nextron-x100-debug-apk
           path: ${{ runner.temp }}/nextron-x100/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Publish APK as GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nextron-x100-build-${{ github.run_number }}
+          name: NEXTRON X-100 Build ${{ github.run_number }}
+          generate_release_notes: false
+          files: ${{ runner.temp }}/nextron-x100/app/build/outputs/apk/debug/app-debug.apk
