@@ -21,3 +21,23 @@ def test_provider_reads_key_from_environment(monkeypatch):
         api_key_env="TEST_NEXTRON_KEY",
     )
     assert provider.is_available() is True
+
+
+def test_chat_endpoint_accepts_base_url():
+    provider = OpenAICompatibleProvider(
+        name="groq",
+        base_url="https://api.groq.com/openai/v1",
+        model="openai/gpt-oss-20b",
+        api_key_env="TEST_NEXTRON_KEY",
+    )
+    assert provider.chat_completions_url == "https://api.groq.com/openai/v1/chat/completions"
+
+
+def test_chat_endpoint_does_not_double_append_chat_completions():
+    provider = OpenAICompatibleProvider(
+        name="groq",
+        base_url="https://api.groq.com/openai/v1/chat/completions",
+        model="openai/gpt-oss-20b",
+        api_key_env="TEST_NEXTRON_KEY",
+    )
+    assert provider.chat_completions_url == "https://api.groq.com/openai/v1/chat/completions"
