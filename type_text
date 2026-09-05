@@ -1,0 +1,33 @@
+import openai
+import os
+
+# Set up the client with base URL for local or proxy connection
+# Pointing to the orchestrator to manage failover
+client = openai.OpenAI(
+    base_url="http://your-orchestrator-url/v1",
+    api_key=os.environ.get("OPENAI_API_KEY") 
+)
+
+def create_chat_completion_with_failover(messages, model="gpt-3.5-turbo"):
+    """
+    Tries to create a chat completion. The orchestrator handles actual model failover.
+    This demonstrates the client-side call structure.
+    """
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            # Extra header could suggest priority provider to orchestrator
+            # headers={"X-Failover-Group": "high-availability"} 
+        )
+        return response.choices[0].message.content
+    except (openai.APIConnectionError, openai.InternalServerError) as e:
+        # If orchestrator itself is down or severely failed, this executes
+        print(f"Orchestrator call failed critically: {e}")
+        # Could attempt direct fallback to a backup provider here
+        return "Critical system error: Failover chain exhausted or orchestrator unreachable."
+
+# Example usage
+messages_payload = [{"role": "user", "content": "Test high availability request"}]
+# content = create_chat_completion_with_failover(messages_payload)
+# print(content)
